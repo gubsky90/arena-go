@@ -1,4 +1,4 @@
-package helpers
+package cont
 
 // Node represents a node in the doubly-linked list.
 type Node[T any] struct {

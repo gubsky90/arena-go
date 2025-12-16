@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/thebagchi/arena-go"
+	"github.com/thebagchi/arena-go/alloca"
 )
 
 // Example struct for pointer demonstration
@@ -36,7 +37,7 @@ func serializePersonToJSON(a *arena.Arena, name string, age int) string {
 
 func main() {
 	// Create an arena with 4KB memory
-	a := arena.New(4096, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(4096))
 	defer a.Delete()
 
 	fmt.Println("=== ArenaSlice Examples ===")

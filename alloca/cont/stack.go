@@ -1,4 +1,4 @@
-package helpers
+package cont
 
 // Stack is a generic LIFO stack.
 type Stack[T any] struct {

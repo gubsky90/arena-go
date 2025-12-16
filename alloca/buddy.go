@@ -7,8 +7,8 @@ import (
 	"sync"
 	"unsafe"
 
+	h "github.com/thebagchi/arena-go/alloca/cont"
 	"github.com/thebagchi/arena-go/res"
-	h "github.com/thebagchi/arena-go/res/helpers"
 )
 
 /*
