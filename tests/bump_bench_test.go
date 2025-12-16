@@ -5,10 +5,11 @@ import (
 	"testing"
 
 	"github.com/thebagchi/arena-go"
+	"github.com/thebagchi/arena-go/alloca"
 )
 
 func BenchmarkBumpAlloc(b *testing.B) {
-	a := arena.New(100, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(100 * 4096))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		ptr := arena.Alloc[int](a)
@@ -17,7 +18,7 @@ func BenchmarkBumpAlloc(b *testing.B) {
 }
 
 func BenchmarkBumpMakeSlice(b *testing.B) {
-	a := arena.New(1000, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1000 * 4096))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		slice := arena.MakeSlice[int](a, 10, 10)
@@ -26,7 +27,7 @@ func BenchmarkBumpMakeSlice(b *testing.B) {
 }
 
 func BenchmarkBumpMakeObject(b *testing.B) {
-	a := arena.New(100, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(100 * 4096))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		obj := arena.MakeObject[struct{ A, B int }](a)
@@ -36,7 +37,7 @@ func BenchmarkBumpMakeObject(b *testing.B) {
 }
 
 func BenchmarkBumpMakeString(b *testing.B) {
-	a := arena.New(1000, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1000 * 4096))
 	str := "benchmark string for allocation"
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -68,7 +69,7 @@ func BenchmarkHeapMakeString(b *testing.B) {
 }
 
 func BenchmarkBumpAllocatorStress(b *testing.B) {
-	a := arena.New(100, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(100 * 4096))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		// Simulate TestBumpAllocatorVariousSizes logic

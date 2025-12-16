@@ -4,10 +4,11 @@ import (
 	"testing"
 
 	"github.com/thebagchi/arena-go"
+	"github.com/thebagchi/arena-go/alloca"
 )
 
 func TestBumpAllocator(t *testing.T) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	p1 := arena.Alloc[int](a)
 	if p1 == nil {
 		t.Fatal("alloc failed")
@@ -27,7 +28,7 @@ func TestBumpAllocator(t *testing.T) {
 }
 
 func TestBumpAllocatorVariousSizes(t *testing.T) {
-	a := arena.New(10, arena.BUMP) // 10 pages for larger allocations
+	a := arena.New(alloca.NewBumpAllocator(10 * 4096)) // 10 pages for larger allocations
 
 	// Test allocating different basic types
 	intPtr := arena.Alloc[int](a)
@@ -117,7 +118,7 @@ func TestBumpAllocatorVariousSizes(t *testing.T) {
 
 func TestBumpAllocatorGrow(t *testing.T) {
 	// Create a small arena with only 1 page (typically 4096 bytes)
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 
 	// Allocate a large slice that exceeds the initial arena size
 	// 1000 * 8 bytes (sizeof(int)) = 8000 bytes > 4096 bytes, forcing growth

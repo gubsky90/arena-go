@@ -1,19 +1,22 @@
-package arena
+package alloca
 
 import (
 	"unsafe"
+
+	"github.com/thebagchi/arena-go/res"
 )
 
 type SlabAllocator struct {
 	blockSize uintptr
+	res       *res.Res
 }
 
-func NewSlabAllocator(blockSize, totalBytes int) *SlabAllocator {
+func NewSlabAllocator(r *res.Res, blockSize, totalBytes int) *SlabAllocator {
 	if blockSize < 16 {
 		blockSize = 16
 	}
 	blockSize = (blockSize + 15) &^ 15
-	s := &SlabAllocator{blockSize: uintptr(blockSize)}
+	s := &SlabAllocator{blockSize: uintptr(blockSize), res: r}
 	// dummy implementation, no actual allocation
 	return s
 }
@@ -37,5 +40,5 @@ func (s *SlabAllocator) Remove(ptr unsafe.Pointer) {
 
 func (s *SlabAllocator) Owns(ptr unsafe.Pointer) bool {
 	// TODO: implement when slab allocator is fully implemented
-	return false
+	return s.res.Owns(ptr)
 }

@@ -4,10 +4,11 @@ import (
 	"testing"
 
 	"github.com/thebagchi/arena-go"
+	"github.com/thebagchi/arena-go/alloca"
 )
 
 func TestWriter(t *testing.T) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	w := arena.NewWriter(a)
 
 	// Test Write

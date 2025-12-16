@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	arena "github.com/thebagchi/arena-go"
+	"github.com/thebagchi/arena-go/alloca"
+	"github.com/thebagchi/arena-go/res"
 )
 
 var (
@@ -30,7 +32,7 @@ func BenchmarkStdStringToBytes(b *testing.B) {
 func BenchmarkZeroCopyToBytes(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = arena.UnsafeBytes(benchStr)
+		_ = res.UnsafeBytes(benchStr)
 	}
 }
 
@@ -46,7 +48,7 @@ func BenchmarkZeroCopyToString(b *testing.B) {
 	data := []byte(benchStr)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = arena.UnsafeString(data)
+		_ = res.UnsafeString(data)
 	}
 }
 
@@ -59,7 +61,7 @@ func BenchmarkStdTrimSpace(b *testing.B) {
 }
 
 func BenchmarkZeroCopyTrimSpace(b *testing.B) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	str := arena.NewStr(a)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -76,7 +78,7 @@ func BenchmarkStdContains(b *testing.B) {
 }
 
 func BenchmarkZeroCopyContains(b *testing.B) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	str := arena.NewStr(a)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -93,7 +95,7 @@ func BenchmarkStdHasPrefix(b *testing.B) {
 }
 
 func BenchmarkZeroCopyHasPrefix(b *testing.B) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	str := arena.NewStr(a)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -110,7 +112,7 @@ func BenchmarkStdHasSuffix(b *testing.B) {
 }
 
 func BenchmarkZeroCopyHasSuffix(b *testing.B) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	str := arena.NewStr(a)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -127,7 +129,7 @@ func BenchmarkStdIndex(b *testing.B) {
 }
 
 func BenchmarkZeroCopyIndex(b *testing.B) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	str := arena.NewStr(a)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -144,7 +146,7 @@ func BenchmarkStdLastIndex(b *testing.B) {
 }
 
 func BenchmarkZeroCopyLastIndex(b *testing.B) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	str := arena.NewStr(a)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -161,7 +163,7 @@ func BenchmarkStdTrim(b *testing.B) {
 }
 
 func BenchmarkZeroCopyTrim(b *testing.B) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	str := arena.NewStr(a)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -178,7 +180,7 @@ func BenchmarkStdTrimLeft(b *testing.B) {
 }
 
 func BenchmarkZeroCopyTrimLeft(b *testing.B) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	str := arena.NewStr(a)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -195,7 +197,7 @@ func BenchmarkStdTrimRight(b *testing.B) {
 }
 
 func BenchmarkZeroCopyTrimRight(b *testing.B) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	str := arena.NewStr(a)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -214,7 +216,7 @@ func BenchmarkStdEqualFold(b *testing.B) {
 }
 
 func BenchmarkZeroCopyEqualFold(b *testing.B) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	str := arena.NewStr(a)
 	str1 := "Hello World"
 	str2 := "hello world"
@@ -235,7 +237,7 @@ func BenchmarkStdCompare(b *testing.B) {
 }
 
 func BenchmarkZeroCopyCompare(b *testing.B) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	str := arena.NewStr(a)
 	str1 := "apple"
 	str2 := "banana"
@@ -254,7 +256,7 @@ func BenchmarkStdToLower(b *testing.B) {
 }
 
 func BenchmarkZeroCopyToLower(b *testing.B) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	str := arena.NewStr(a)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -271,7 +273,7 @@ func BenchmarkStdToUpper(b *testing.B) {
 }
 
 func BenchmarkZeroCopyToUpper(b *testing.B) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	str := arena.NewStr(a)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -288,7 +290,7 @@ func BenchmarkStdTitle(b *testing.B) {
 }
 
 func BenchmarkZeroCopyTitle(b *testing.B) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	str := arena.NewStr(a)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -305,7 +307,7 @@ func BenchmarkStdSplit(b *testing.B) {
 }
 
 func BenchmarkArenaSplit(b *testing.B) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	str := arena.NewStr(a)
 	defer a.Delete()
 	b.ResetTimer()
@@ -325,7 +327,7 @@ func BenchmarkStdJoin(b *testing.B) {
 }
 
 func BenchmarkArenaJoin(b *testing.B) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	str := arena.NewStr(a)
 	defer a.Delete()
 	parts := []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j"}
@@ -345,7 +347,7 @@ func BenchmarkStdFields(b *testing.B) {
 }
 
 func BenchmarkArenaFields(b *testing.B) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	str := arena.NewStr(a)
 	defer a.Delete()
 	b.ResetTimer()
@@ -364,7 +366,7 @@ func BenchmarkStdCount(b *testing.B) {
 }
 
 func BenchmarkZeroCopyCount(b *testing.B) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	str := arena.NewStr(a)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -381,7 +383,7 @@ func BenchmarkStdReplace(b *testing.B) {
 }
 
 func BenchmarkArenaReplace(b *testing.B) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	str := arena.NewStr(a)
 	defer a.Delete()
 	b.ResetTimer()
@@ -400,7 +402,7 @@ func BenchmarkStdReplaceAll(b *testing.B) {
 }
 
 func BenchmarkArenaReplaceAll(b *testing.B) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	str := arena.NewStr(a)
 	defer a.Delete()
 	b.ResetTimer()
@@ -420,7 +422,7 @@ func BenchmarkStdRepeat(b *testing.B) {
 }
 
 func BenchmarkArenaRepeat(b *testing.B) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	str := arena.NewStr(a)
 	defer a.Delete()
 	testStr := "hello"
@@ -440,7 +442,7 @@ func BenchmarkStdTrimPrefix(b *testing.B) {
 }
 
 func BenchmarkZeroCopyTrimPrefix(b *testing.B) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	str := arena.NewStr(a)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -457,7 +459,7 @@ func BenchmarkStdTrimSuffix(b *testing.B) {
 }
 
 func BenchmarkZeroCopyTrimSuffix(b *testing.B) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	str := arena.NewStr(a)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -474,7 +476,7 @@ func BenchmarkStdCut(b *testing.B) {
 }
 
 func BenchmarkZeroCopyCut(b *testing.B) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	str := arena.NewStr(a)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -491,7 +493,7 @@ func BenchmarkStdIndexByte(b *testing.B) {
 }
 
 func BenchmarkZeroCopyIndexByte(b *testing.B) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	str := arena.NewStr(a)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -508,7 +510,7 @@ func BenchmarkStdContainsAny(b *testing.B) {
 }
 
 func BenchmarkZeroCopyContainsAny(b *testing.B) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	str := arena.NewStr(a)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -526,7 +528,7 @@ func BenchmarkStdSplitLong(b *testing.B) {
 }
 
 func BenchmarkArenaSplitLong(b *testing.B) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	str := arena.NewStr(a)
 	defer a.Delete()
 	longStr := strings.Repeat("word,", 1000)
@@ -546,7 +548,7 @@ func BenchmarkStdSplitAllocs(b *testing.B) {
 }
 
 func BenchmarkArenaSplitAllocs(b *testing.B) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	str := arena.NewStr(a)
 	defer a.Delete()
 	b.ReportAllocs()
@@ -564,7 +566,7 @@ func BenchmarkStdFieldsAllocs(b *testing.B) {
 }
 
 func BenchmarkArenaFieldsAllocs(b *testing.B) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	str := arena.NewStr(a)
 	defer a.Delete()
 	b.ReportAllocs()
@@ -576,7 +578,7 @@ func BenchmarkArenaFieldsAllocs(b *testing.B) {
 
 // Lines Benchmarks
 func BenchmarkLines(b *testing.B) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	str := arena.NewStr(a)
 	linesStr := strings.Repeat("This is a line of text\n", 100)
 	b.ResetTimer()
@@ -599,7 +601,7 @@ func BenchmarkStdLines(b *testing.B) {
 
 // Clone Benchmarks
 func BenchmarkArenaClone(b *testing.B) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	str := arena.NewStr(a)
 	defer a.Delete()
 	b.ResetTimer()
@@ -619,7 +621,7 @@ func BenchmarkStdFieldsFunc(b *testing.B) {
 }
 
 func BenchmarkArenaFieldsFunc(b *testing.B) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	str := arena.NewStr(a)
 	defer a.Delete()
 	isSpace := func(r rune) bool { return r == ' ' || r == '\t' || r == '\n' }
@@ -632,7 +634,7 @@ func BenchmarkArenaFieldsFunc(b *testing.B) {
 
 // ContainsFunc Benchmarks
 func BenchmarkContainsFunc(b *testing.B) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	str := arena.NewStr(a)
 	isDigit := func(r rune) bool { return r >= '0' && r <= '9' }
 	b.ResetTimer()
@@ -643,7 +645,7 @@ func BenchmarkContainsFunc(b *testing.B) {
 
 // IndexFunc Benchmarks
 func BenchmarkIndexFunc(b *testing.B) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	str := arena.NewStr(a)
 	isSpace := func(r rune) bool { return r == ' ' }
 	b.ResetTimer()
@@ -654,7 +656,7 @@ func BenchmarkIndexFunc(b *testing.B) {
 
 // LastIndexFunc Benchmarks
 func BenchmarkLastIndexFunc(b *testing.B) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	str := arena.NewStr(a)
 	isSpace := func(r rune) bool { return r == ' ' }
 	b.ResetTimer()
@@ -678,7 +680,7 @@ func BenchmarkStdMap(b *testing.B) {
 }
 
 func BenchmarkArenaMapASCII(b *testing.B) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	str := arena.NewStr(a)
 	toUpper := func(c byte) int {
 		if c >= 'a' && c <= 'z' {
@@ -693,7 +695,7 @@ func BenchmarkArenaMapASCII(b *testing.B) {
 }
 
 func BenchmarkArenaMapUTF8(b *testing.B) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	str := arena.NewStr(a)
 	toUpper := func(r rune) rune {
 		if r >= 'a' && r <= 'z' {
@@ -708,7 +710,7 @@ func BenchmarkArenaMapUTF8(b *testing.B) {
 }
 
 func BenchmarkArenaMapString(b *testing.B) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	str := arena.NewStr(a)
 	toUpper := func(r rune) rune {
 		if r >= 'a' && r <= 'z' {
@@ -731,7 +733,7 @@ func BenchmarkStdToTitle(b *testing.B) {
 }
 
 func BenchmarkArenaToTitle(b *testing.B) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	str := arena.NewStr(a)
 	defer a.Delete()
 	b.ResetTimer()
@@ -751,7 +753,7 @@ func BenchmarkStdToValidUTF8(b *testing.B) {
 }
 
 func BenchmarkArenaToValidUTF8(b *testing.B) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	str := arena.NewStr(a)
 	defer a.Delete()
 	invalidStr := "hello\xffworld\xfe"
@@ -772,7 +774,7 @@ func BenchmarkStdTrimFunc(b *testing.B) {
 }
 
 func BenchmarkTrimFunc(b *testing.B) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	str := arena.NewStr(a)
 	isSpace := func(r rune) bool { return r == ' ' || r == '\t' }
 	b.ResetTimer()
@@ -791,7 +793,7 @@ func BenchmarkStdTrimLeftFunc(b *testing.B) {
 }
 
 func BenchmarkTrimLeftFunc(b *testing.B) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	str := arena.NewStr(a)
 	isSpace := func(r rune) bool { return r == ' ' || r == '\t' }
 	b.ResetTimer()
@@ -810,7 +812,7 @@ func BenchmarkStdTrimRightFunc(b *testing.B) {
 }
 
 func BenchmarkTrimRightFunc(b *testing.B) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	str := arena.NewStr(a)
 	isSpace := func(r rune) bool { return r == ' ' || r == '\t' }
 	b.ResetTimer()
@@ -821,7 +823,7 @@ func BenchmarkTrimRightFunc(b *testing.B) {
 
 // Allocation comparison benchmarks for new functions
 func BenchmarkArenaCloneAllocs(b *testing.B) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	str := arena.NewStr(a)
 	defer a.Delete()
 	b.ReportAllocs()
@@ -832,7 +834,7 @@ func BenchmarkArenaCloneAllocs(b *testing.B) {
 }
 
 func BenchmarkArenaFieldsFuncAllocs(b *testing.B) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	str := arena.NewStr(a)
 	defer a.Delete()
 	isSpace := func(r rune) bool { return r == ' ' || r == '\t' || r == '\n' }
@@ -844,7 +846,7 @@ func BenchmarkArenaFieldsFuncAllocs(b *testing.B) {
 }
 
 func BenchmarkArenaMapStringAllocs(b *testing.B) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	str := arena.NewStr(a)
 	toUpper := func(r rune) rune {
 		if r >= 'a' && r <= 'z' {
@@ -859,7 +861,7 @@ func BenchmarkArenaMapStringAllocs(b *testing.B) {
 }
 
 func BenchmarkArenaToTitleAllocs(b *testing.B) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	str := arena.NewStr(a)
 	defer a.Delete()
 	b.ReportAllocs()
@@ -870,7 +872,7 @@ func BenchmarkArenaToTitleAllocs(b *testing.B) {
 }
 
 func BenchmarkArenaToValidUTF8Allocs(b *testing.B) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	str := arena.NewStr(a)
 	defer a.Delete()
 	invalidStr := "hello\xffworld\xfe"

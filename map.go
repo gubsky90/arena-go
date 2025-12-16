@@ -14,7 +14,7 @@ const INITIAL_BUCKET_COUNT = 16 // Initial number of buckets in the hash map
 // Thread-safe: All operations (Get, Set, Delete, Range) are protected by an RWMutex.
 // Multiple goroutines can safely call Get concurrently, while Set/Delete operations are serialized.
 type Map[K comparable, V any] struct {
-	mu      sync.RWMutex
+	mtx     sync.RWMutex
 	arena   *Arena
 	buckets *Vec[*entry[K, V]] // arena-backed bucket array (array of pointers to chain heads)
 	count   int
@@ -98,8 +98,8 @@ func writeBytes(h *maphash.Hash, ptr unsafe.Pointer, size uintptr) {
 
 // Set inserts or updates a key-value pair using separate chaining
 func (m *Map[K, V]) Set(key K, value V) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	m.mtx.Lock()
+	defer m.mtx.Unlock()
 
 	// Grow when load factor > 0.75
 	if m.count > m.cap*3/4 {
@@ -140,8 +140,8 @@ func (m *Map[K, V]) Set(key K, value V) {
 
 // Get returns value and true if found
 func (m *Map[K, V]) Get(key K) (V, bool) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+	m.mtx.RLock()
+	defer m.mtx.RUnlock()
 
 	if m.cap == 0 {
 		var zero V
@@ -169,8 +169,8 @@ func (m *Map[K, V]) Get(key K) (V, bool) {
 
 // Delete removes a key from the chain and frees the entry memory
 func (m *Map[K, V]) Delete(key K) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	m.mtx.Lock()
+	defer m.mtx.Unlock()
 
 	if m.cap == 0 {
 		return
@@ -208,8 +208,8 @@ func (m *Map[K, V]) Delete(key K) {
 
 // Range calls f for each entry in all chains
 func (m *Map[K, V]) Range(f func(K, V) bool) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+	m.mtx.RLock()
+	defer m.mtx.RUnlock()
 
 	for i := range m.cap {
 		e, ok := m.buckets.Get(i)
@@ -228,8 +228,8 @@ func (m *Map[K, V]) Range(f func(K, V) bool) {
 
 // Len returns number of entries
 func (m *Map[K, V]) Len() int {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+	m.mtx.RLock()
+	defer m.mtx.RUnlock()
 	return m.count
 }
 
@@ -286,8 +286,8 @@ func (m *Map[K, V]) grow() {
 
 // Reset frees all entries and clears the map while keeping capacity
 func (m *Map[K, V]) Reset() {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	m.mtx.Lock()
+	defer m.mtx.Unlock()
 
 	// Free all entry nodes
 	for i := range m.cap {
@@ -310,8 +310,8 @@ func (m *Map[K, V]) Reset() {
 // after the arena is deleted. Use this when you need to preserve map data beyond
 // the arena's lifetime.
 func (m *Map[K, V]) Clone() map[K]V {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+	m.mtx.RLock()
+	defer m.mtx.RUnlock()
 
 	if m.count == 0 {
 		return nil
@@ -347,8 +347,8 @@ func (m *Map[K, V]) Clone() map[K]V {
 //	}
 func (m *Map[K, V]) Keys() iter.Seq[K] {
 	return func(yield func(K) bool) {
-		m.mu.RLock()
-		defer m.mu.RUnlock()
+		m.mtx.RLock()
+		defer m.mtx.RUnlock()
 
 		for i := range m.cap {
 			e, ok := m.buckets.Get(i)
@@ -376,8 +376,8 @@ func (m *Map[K, V]) Keys() iter.Seq[K] {
 //	}
 func (m *Map[K, V]) Values() iter.Seq[V] {
 	return func(yield func(V) bool) {
-		m.mu.RLock()
-		defer m.mu.RUnlock()
+		m.mtx.RLock()
+		defer m.mtx.RUnlock()
 
 		for i := range m.cap {
 			e, ok := m.buckets.Get(i)
@@ -405,8 +405,8 @@ func (m *Map[K, V]) Values() iter.Seq[V] {
 //	}
 func (m *Map[K, V]) All() iter.Seq2[K, V] {
 	return func(yield func(K, V) bool) {
-		m.mu.RLock()
-		defer m.mu.RUnlock()
+		m.mtx.RLock()
+		defer m.mtx.RUnlock()
 
 		for i := range m.cap {
 			e, ok := m.buckets.Get(i)
@@ -444,8 +444,8 @@ type MapIter[K comparable, V any] struct {
 //	    fmt.Printf("%s: %d\n", key, val)
 //	}
 func (m *Map[K, V]) Iter() *MapIter[K, V] {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+	m.mtx.RLock()
+	defer m.mtx.RUnlock()
 
 	it := &MapIter[K, V]{
 		m:       m,
@@ -468,8 +468,8 @@ func (m *Map[K, V]) Iter() *MapIter[K, V] {
 // Next returns the next key-value pair and whether it exists
 // Returns (zero_key, zero_value, false) when iteration is complete.
 func (it *MapIter[K, V]) Next() (K, V, bool) {
-	it.m.mu.RLock()
-	defer it.m.mu.RUnlock()
+	it.m.mtx.RLock()
+	defer it.m.mtx.RUnlock()
 
 	if it.current == nil {
 		var zeroK K

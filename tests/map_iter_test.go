@@ -5,10 +5,11 @@ import (
 	"testing"
 
 	"github.com/thebagchi/arena-go"
+	"github.com/thebagchi/arena-go/alloca"
 )
 
 func TestMap_Keys(t *testing.T) {
-	a := arena.New(4096, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(4096 * 4096))
 	defer a.Delete()
 
 	m := arena.NewMap[string, int](a)
@@ -33,7 +34,7 @@ func TestMap_Keys(t *testing.T) {
 }
 
 func TestMap_Values(t *testing.T) {
-	a := arena.New(4096, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(4096 * 4096))
 	defer a.Delete()
 
 	m := arena.NewMap[string, int](a)
@@ -58,7 +59,7 @@ func TestMap_Values(t *testing.T) {
 }
 
 func TestMap_All_Iterator(t *testing.T) {
-	a := arena.New(4096, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(4096 * 4096))
 	defer a.Delete()
 
 	m := arena.NewMap[string, int](a)
@@ -84,7 +85,7 @@ func TestMap_All_Iterator(t *testing.T) {
 }
 
 func TestMap_All_EarlyTermination(t *testing.T) {
-	a := arena.New(4096, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(4096 * 4096))
 	defer a.Delete()
 
 	m := arena.NewMap[string, int](a)
@@ -106,7 +107,7 @@ func TestMap_All_EarlyTermination(t *testing.T) {
 }
 
 func TestMap_Iter(t *testing.T) {
-	a := arena.New(4096, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(4096 * 4096))
 	defer a.Delete()
 
 	m := arena.NewMap[string, int](a)
@@ -133,7 +134,7 @@ func TestMap_Iter(t *testing.T) {
 }
 
 func TestMap_IterEmpty(t *testing.T) {
-	a := arena.New(4096, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(4096 * 4096))
 	defer a.Delete()
 
 	m := arena.NewMap[string, int](a)
@@ -146,7 +147,7 @@ func TestMap_IterEmpty(t *testing.T) {
 }
 
 func TestMap_KeysEmpty(t *testing.T) {
-	a := arena.New(4096, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(4096 * 4096))
 	defer a.Delete()
 
 	m := arena.NewMap[string, int](a)

@@ -1,14 +1,14 @@
 // Package arena provides memory allocation utilities for arena-based allocators.
 // This package handles low-level memory operations using system calls for efficient
 // memory management outside of Go's garbage collector.
-package arena
+package res
 
 import "syscall"
 
-var pagesize int
+var PAGE_SIZE int
 
 func init() {
-	pagesize = syscall.Getpagesize()
+	PAGE_SIZE = syscall.Getpagesize()
 }
 
 // MakePages allocates memory pages using mmap.
@@ -27,7 +27,7 @@ func init() {
 // Note: The allocated memory is not managed by Go's GC and must be explicitly
 // released using ReleasePages to avoid memory leaks.
 func MakePages(size int) []byte {
-	size = ((size + pagesize - 1) / pagesize) * pagesize
+	size = ((size + PAGE_SIZE - 1) / PAGE_SIZE) * PAGE_SIZE
 	data, err := syscall.Mmap(-1, 0, size, syscall.PROT_READ|syscall.PROT_WRITE, syscall.MAP_PRIVATE|syscall.MAP_ANONYMOUS)
 	if err != nil {
 		panic(err)

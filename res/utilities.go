@@ -1,8 +1,24 @@
-package arena
+package res
 
 import (
+	"math/bits"
 	"unsafe"
 )
+
+// RoundPow2 returns the smallest power of two that is >= n.
+func RoundPow2(n uint64) uint64 {
+	return uint64(1) << uint64(bits.UintSize-bits.LeadingZeros64(n-1))
+}
+
+// Pow2 returns 2^n.
+func Pow2(n uint64) uint64 {
+	return 1 << n
+}
+
+// Log2 returns log2(n).
+func Log2(n uint64) uint64 {
+	return uint64(bits.Len64(n) - 1)
+}
 
 // AsUnsafePointer converts a pointer to unsafe.Pointer.
 // This is a generic helper that eliminates the need for explicit unsafe.Pointer casts.
@@ -43,12 +59,6 @@ func AsUnsafePointerString(s string) unsafe.Pointer {
 	return unsafe.Pointer(unsafe.StringData(s))
 }
 
-// OwnsPtr checks if the given pointer to a value belongs to memory managed by this arena.
-// This is a convenience wrapper around Owns that eliminates the need for unsafe.Pointer casts.
-func OwnsPtr[T any](a *Arena, ptr *T) bool {
-	return a.Allocator.Owns(unsafe.Pointer(ptr))
-}
-
 // UnsafeBytes converts a string to a byte slice without copying (unsafe).
 func UnsafeBytes(s string) []byte {
 	return unsafe.Slice(unsafe.StringData(s), len(s))
@@ -62,20 +72,26 @@ func UnsafeString(b []byte) string {
 	return unsafe.String(&b[0], len(b))
 }
 
-// OwnsSlice checks if the underlying array of the given slice belongs to memory managed by this arena.
-// Returns false for nil or empty slices.
-func OwnsSlice[T any](a *Arena, slice []T) bool {
-	if len(slice) == 0 {
-		return false
-	}
-	return a.Owns(unsafe.Pointer(unsafe.SliceData(slice)))
+// Ptr converts a pointer to unsafe.Pointer.
+// This is a generic helper that eliminates the need for explicit unsafe.Pointer casts.
+func Ptr[T any](ptr *T) unsafe.Pointer {
+	return unsafe.Pointer(ptr)
 }
 
-// OwnsString checks if the underlying data of the given string belongs to memory managed by this arena.
-// Returns false for empty strings.
-func OwnsString(a *Arena, s string) bool {
-	if len(s) == 0 {
-		return false
+// SlicePtr converts a slice to unsafe.Pointer pointing to its underlying array.
+// Returns nil for empty slices.
+func SlicePtr[T any](slice []T) unsafe.Pointer {
+	if len(slice) == 0 {
+		return nil
 	}
-	return a.Allocator.Owns(unsafe.Pointer(unsafe.StringData(s)))
+	return unsafe.Pointer(unsafe.SliceData(slice))
+}
+
+// StringPtr converts a string to unsafe.Pointer pointing to its underlying data.
+// Returns nil for empty strings.
+func StringPtr(s string) unsafe.Pointer {
+	if len(s) == 0 {
+		return nil
+	}
+	return unsafe.Pointer(unsafe.StringData(s))
 }

@@ -5,10 +5,11 @@ import (
 	"testing"
 
 	arena "github.com/thebagchi/arena-go"
+	"github.com/thebagchi/arena-go/alloca"
 )
 
 func TestReader(t *testing.T) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	data := []byte("hello world")
 	reader := arena.NewReader(a, data)
 

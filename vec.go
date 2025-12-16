@@ -13,6 +13,8 @@ package arena
 import (
 	"iter"
 	"sort"
+
+	"github.com/thebagchi/arena-go/res"
 )
 
 // Vec[T] – the ultimate appendable slice in arena memory
@@ -164,7 +166,7 @@ func (s *Vec[T]) ensure(needed int) {
 	// Use MakeSlice from object.go to allocate from arena
 	temp := MakeSlice[T](s.arena, len(s.data), capacity)
 	copy(temp, s.data)
-	s.arena.Remove(AsUnsafePointerSlice(s.data))
+	s.arena.Remove(res.AsUnsafePointerSlice(s.data))
 	s.data = temp
 }
 

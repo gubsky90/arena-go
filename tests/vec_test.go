@@ -5,10 +5,11 @@ import (
 	"testing"
 
 	"github.com/thebagchi/arena-go"
+	"github.com/thebagchi/arena-go/alloca"
 )
 
 func TestVecBasic(t *testing.T) {
-	a := arena.New(1024, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1024 * 4096))
 	defer a.Delete()
 
 	// Test empty slice
@@ -31,7 +32,7 @@ func TestVecBasic(t *testing.T) {
 }
 
 func TestVecAppendSlice(t *testing.T) {
-	a := arena.New(1024, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1024 * 4096))
 	defer a.Delete()
 
 	slice := arena.NewVec[int](a)
@@ -64,7 +65,7 @@ func TestVecAppendSlice(t *testing.T) {
 }
 
 func TestVecSSO(t *testing.T) {
-	a := arena.New(1024, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1024 * 4096))
 	defer a.Delete()
 
 	// Test small slice stays in SSO
@@ -98,7 +99,7 @@ func TestVecSSO(t *testing.T) {
 }
 
 func TestVecReset(t *testing.T) {
-	a := arena.New(1024, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1024 * 4096))
 	defer a.Delete()
 
 	slice := arena.NewVec[int](a)
@@ -129,7 +130,7 @@ func TestVecReset(t *testing.T) {
 }
 
 func TestVecClone(t *testing.T) {
-	a := arena.New(1024, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1024 * 4096))
 
 	slice := arena.NewVec[string](a)
 	slice.AppendSlice([]string{"hello", "world", "arena"})
@@ -150,7 +151,7 @@ func TestVecClone(t *testing.T) {
 }
 
 func TestVecIterators(t *testing.T) {
-	a := arena.New(1024, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1024 * 4096))
 	defer a.Delete()
 
 	slice := arena.NewVec[int](a)
@@ -197,7 +198,7 @@ func TestVecIterators(t *testing.T) {
 }
 
 func TestVecRangeLoop(t *testing.T) {
-	a := arena.New(1024, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1024 * 4096))
 	defer a.Delete()
 
 	slice := arena.NewVec[string](a)
@@ -213,7 +214,7 @@ func TestVecRangeLoop(t *testing.T) {
 }
 
 func TestVecLargeData(t *testing.T) {
-	a := arena.New(100*1024, arena.BUMP) // 100KB arena
+	a := arena.New(alloca.NewBumpAllocator(100 * 1024 * 4096)) // 100KB arena
 	defer a.Delete()
 
 	slice := arena.NewVec[int](a)
@@ -236,7 +237,7 @@ func TestVecLargeData(t *testing.T) {
 }
 
 func TestVecGenerics(t *testing.T) {
-	a := arena.New(1024, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1024 * 4096))
 	defer a.Delete()
 
 	// Test with different types
@@ -262,7 +263,7 @@ func TestVecGenerics(t *testing.T) {
 }
 
 func TestVecEdgeCases(t *testing.T) {
-	a := arena.New(1024, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1024 * 4096))
 	defer a.Delete()
 
 	// Test zero-sized types
@@ -289,7 +290,7 @@ func TestVecEdgeCases(t *testing.T) {
 }
 
 func BenchmarkVecAppend(b *testing.B) {
-	a := arena.New(1024*1024, arena.BUMP) // 1MB arena
+	a := arena.New(alloca.NewBumpAllocator(1024 * 1024 * 4096)) // 1MB arena
 	defer a.Delete()
 
 	b.ResetTimer()
@@ -305,7 +306,7 @@ func BenchmarkVecAppend(b *testing.B) {
 }
 
 func BenchmarkVecAppendSlice(b *testing.B) {
-	a := arena.New(1024*1024, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1024 * 1024 * 4096))
 	defer a.Delete()
 
 	data := make([]int, 100)
@@ -324,7 +325,7 @@ func BenchmarkVecAppendSlice(b *testing.B) {
 }
 
 func BenchmarkVecIterate(b *testing.B) {
-	a := arena.New(1024*1024, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1024 * 1024 * 4096))
 	defer a.Delete()
 
 	slice := arena.NewVec[int](a)

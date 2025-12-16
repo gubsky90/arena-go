@@ -20,21 +20,12 @@
 package arena
 
 import (
-	"syscall"
 	"unsafe"
 )
 
 // ---------------------------------------------------------------
 // Public API – one arena for all types
 // ---------------------------------------------------------------
-
-type Type int
-
-const (
-	BUMP Type = iota
-	SLAB
-	BUDDY
-)
 
 // Arena is the beautiful multi-type facade.
 // Thread-safe: Multiple goroutines can safely call Alloc concurrently.
@@ -43,25 +34,9 @@ type Arena struct {
 	Allocator
 }
 
-// New creates an arena. pages == 0 → 1 page (4 KiB default)
-func New(pages int, alloc Type) *Arena {
-	if pages <= 0 {
-		pages = 1 // ← your request: treat 0 as 1
-	}
-	size := pages * syscall.Getpagesize()
-
-	var raw Allocator
-	switch alloc {
-	case BUMP:
-		raw = NewBumpAllocator(size)
-	case SLAB:
-		raw = NewSlabAllocator(256, size) // configurable block size
-	case BUDDY:
-		raw = NewBuddyAllocator(syscall.Getpagesize(), pages)
-	default:
-		raw = NewBumpAllocator(size)
-	}
-	return &Arena{Allocator: raw}
+// New creates an arena from an Allocator implementation.
+func New(alloc Allocator) *Arena {
+	return &Arena{Allocator: alloc}
 }
 
 func (a *Arena) Reset() {
@@ -88,4 +63,28 @@ type Allocator interface {
 	Delete()
 	Remove(ptr unsafe.Pointer)
 	Owns(ptr unsafe.Pointer) bool
+}
+
+// OwnsPtr checks if the given pointer to a value belongs to memory managed by this arena.
+// This is a convenience wrapper around Owns that eliminates the need for unsafe.Pointer casts.
+func OwnsPtr[T any](a *Arena, ptr *T) bool {
+	return a.Allocator.Owns(unsafe.Pointer(ptr))
+}
+
+// OwnsSlice checks if the underlying array of the given slice belongs to memory managed by this arena.
+// Returns false for nil or empty slices.
+func OwnsSlice[T any](a *Arena, slice []T) bool {
+	if len(slice) == 0 {
+		return false
+	}
+	return a.Owns(unsafe.Pointer(unsafe.SliceData(slice)))
+}
+
+// OwnsString checks if the underlying data of the given string belongs to memory managed by this arena.
+// Returns false for empty strings.
+func OwnsString(a *Arena, s string) bool {
+	if len(s) == 0 {
+		return false
+	}
+	return a.Allocator.Owns(unsafe.Pointer(unsafe.StringData(s)))
 }

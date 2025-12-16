@@ -5,6 +5,8 @@ import (
 	"iter"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/thebagchi/arena-go/res"
 )
 
 // Str is a string utility struct that holds an arena reference for memory management.
@@ -19,62 +21,62 @@ func NewStr(a *Arena) *Str {
 
 // TrimSpace trims whitespace from the string using bytes operations and returns an unsafe string sharing memory.
 func (s *Str) TrimSpace(str string) string {
-	return UnsafeString(bytes.TrimSpace(UnsafeBytes(str)))
+	return res.UnsafeString(bytes.TrimSpace(res.UnsafeBytes(str)))
 }
 
 // IsEmpty checks if the string is empty or contains only whitespace.
 func (s *Str) IsEmpty(str string) bool {
-	return len(bytes.TrimSpace(UnsafeBytes(str))) == 0
+	return len(bytes.TrimSpace(res.UnsafeBytes(str))) == 0
 }
 
 // Contains checks if the string contains the substring without copying.
 func (s *Str) Contains(str, substr string) bool {
-	return bytes.Contains(UnsafeBytes(str), UnsafeBytes(substr))
+	return bytes.Contains(res.UnsafeBytes(str), res.UnsafeBytes(substr))
 }
 
 // HasPrefix checks if the string starts with the prefix without copying.
 func (s *Str) HasPrefix(str, prefix string) bool {
-	return bytes.HasPrefix(UnsafeBytes(str), UnsafeBytes(prefix))
+	return bytes.HasPrefix(res.UnsafeBytes(str), res.UnsafeBytes(prefix))
 }
 
 // HasSuffix checks if the string ends with the suffix without copying.
 func (s *Str) HasSuffix(str, suffix string) bool {
-	return bytes.HasSuffix(UnsafeBytes(str), UnsafeBytes(suffix))
+	return bytes.HasSuffix(res.UnsafeBytes(str), res.UnsafeBytes(suffix))
 }
 
 // Index returns the index of the first occurrence of substr in str, or -1 if not found, without copying.
 func (s *Str) Index(str, substr string) int {
-	return bytes.Index(UnsafeBytes(str), UnsafeBytes(substr))
+	return bytes.Index(res.UnsafeBytes(str), res.UnsafeBytes(substr))
 }
 
 // LastIndex returns the index of the last occurrence of substr in str, or -1 if not found, without copying.
 func (s *Str) LastIndex(str, substr string) int {
-	return bytes.LastIndex(UnsafeBytes(str), UnsafeBytes(substr))
+	return bytes.LastIndex(res.UnsafeBytes(str), res.UnsafeBytes(substr))
 }
 
 // Trim trims characters from the cutset from both ends of the string without copying.
 func (s *Str) Trim(str string, cutset string) string {
-	return UnsafeString(bytes.Trim(UnsafeBytes(str), cutset))
+	return res.UnsafeString(bytes.Trim(res.UnsafeBytes(str), cutset))
 }
 
 // TrimLeft trims characters from the cutset from the left end of the string without copying.
 func (s *Str) TrimLeft(str string, cutset string) string {
-	return UnsafeString(bytes.TrimLeft(UnsafeBytes(str), cutset))
+	return res.UnsafeString(bytes.TrimLeft(res.UnsafeBytes(str), cutset))
 }
 
 // TrimRight trims characters from the cutset from the right end of the string without copying.
 func (s *Str) TrimRight(str string, cutset string) string {
-	return UnsafeString(bytes.TrimRight(UnsafeBytes(str), cutset))
+	return res.UnsafeString(bytes.TrimRight(res.UnsafeBytes(str), cutset))
 }
 
 // EqualFold performs case-insensitive comparison of two strings without copying.
 func (s *Str) EqualFold(str, t string) bool {
-	return bytes.EqualFold(UnsafeBytes(str), UnsafeBytes(t))
+	return bytes.EqualFold(res.UnsafeBytes(str), res.UnsafeBytes(t))
 }
 
 // Compare performs lexicographical comparison of two strings without copying.
 func (s *Str) Compare(str, t string) int {
-	return bytes.Compare(UnsafeBytes(str), UnsafeBytes(t))
+	return bytes.Compare(res.UnsafeBytes(str), res.UnsafeBytes(t))
 }
 
 // ToLower converts the string to lowercase.
@@ -82,7 +84,7 @@ func (s *Str) Compare(str, t string) int {
 func (s *Str) ToLower(str string) string {
 	// Fast path: check if already lowercase
 	var (
-		b       = UnsafeBytes(str)
+		b       = res.UnsafeBytes(str)
 		convert = false
 	)
 	for _, c := range b {
@@ -112,7 +114,7 @@ func (s *Str) ToLower(str string) string {
 func (s *Str) ToUpper(str string) string {
 	// Fast path: check if already uppercase
 	var (
-		b       = UnsafeBytes(str)
+		b       = res.UnsafeBytes(str)
 		convert = false
 	)
 	for _, c := range b {
@@ -197,7 +199,7 @@ func (s *Str) Split(str, sep string) []string {
 
 	// Count occurrences to pre-allocate with exact capacity
 	var (
-		n     = bytes.Count(UnsafeBytes(str), UnsafeBytes(sep)) + 1
+		n     = bytes.Count(res.UnsafeBytes(str), res.UnsafeBytes(sep)) + 1
 		slice = MakeSlice[string](s.arena, 0, n)
 	)
 
@@ -243,7 +245,7 @@ func (s *Str) Join(elems []string, sep string) string {
 		copy(data[pos:], e)
 		pos = pos + len(e)
 	}
-	return UnsafeString(data)
+	return res.UnsafeString(data)
 }
 
 // Fields splits the string on whitespace and allocates the result in the arena.
@@ -310,37 +312,37 @@ func (s *Str) TrimSuffix(str, suffix string) string {
 
 // Count counts the number of non-overlapping instances of substr in str.
 func (s *Str) Count(str, substr string) int {
-	return bytes.Count(UnsafeBytes(str), UnsafeBytes(substr))
+	return bytes.Count(res.UnsafeBytes(str), res.UnsafeBytes(substr))
 }
 
 // IndexByte returns the index of the first instance of byte c in str, or -1 if not found.
 func (s *Str) IndexByte(str string, c byte) int {
-	return bytes.IndexByte(UnsafeBytes(str), c)
+	return bytes.IndexByte(res.UnsafeBytes(str), c)
 }
 
 // LastIndexByte returns the index of the last instance of byte c in str, or -1 if not found.
 func (s *Str) LastIndexByte(str string, c byte) int {
-	return bytes.LastIndexByte(UnsafeBytes(str), c)
+	return bytes.LastIndexByte(res.UnsafeBytes(str), c)
 }
 
 // IndexAny returns the index of the first instance of any character from chars in str, or -1 if not found.
 func (s *Str) IndexAny(str, chars string) int {
-	return bytes.IndexAny(UnsafeBytes(str), chars)
+	return bytes.IndexAny(res.UnsafeBytes(str), chars)
 }
 
 // LastIndexAny returns the index of the last instance of any character from chars in str, or -1 if not found.
 func (s *Str) LastIndexAny(str, chars string) int {
-	return bytes.LastIndexAny(UnsafeBytes(str), chars)
+	return bytes.LastIndexAny(res.UnsafeBytes(str), chars)
 }
 
 // ContainsAny checks if the string contains any character from chars without copying.
 func (s *Str) ContainsAny(str, chars string) bool {
-	return bytes.ContainsAny(UnsafeBytes(str), chars)
+	return bytes.ContainsAny(res.UnsafeBytes(str), chars)
 }
 
 // ContainsRune checks if the string contains the rune without copying.
 func (s *Str) ContainsRune(str string, r rune) bool {
-	return bytes.ContainsRune(UnsafeBytes(str), r)
+	return bytes.ContainsRune(res.UnsafeBytes(str), r)
 }
 
 // Replace replaces the first n occurrences of old with new and allocates the result in the arena.
@@ -428,11 +430,11 @@ func (s *Str) CutSuffix(str, suffix string) (before string, found bool) {
 // If n < 0, there is no limit on the number of parts.
 func (s *Str) SplitN(str, sep string, n int) []string {
 	var (
-		parts = bytes.SplitN(UnsafeBytes(str), UnsafeBytes(sep), n)
+		parts = bytes.SplitN(res.UnsafeBytes(str), res.UnsafeBytes(sep), n)
 		slice = MakeSlice[string](s.arena, 0, len(parts))
 	)
 	for _, p := range parts {
-		slice = Append(s.arena, slice, UnsafeString(p))
+		slice = Append(s.arena, slice, res.UnsafeString(p))
 	}
 	return slice
 }
@@ -440,11 +442,11 @@ func (s *Str) SplitN(str, sep string, n int) []string {
 // SplitAfter splits the string after each instance of sep and allocates the result in the arena.
 func (s *Str) SplitAfter(str, sep string) []string {
 	var (
-		parts = bytes.SplitAfter(UnsafeBytes(str), UnsafeBytes(sep))
+		parts = bytes.SplitAfter(res.UnsafeBytes(str), res.UnsafeBytes(sep))
 		slice = MakeSlice[string](s.arena, 0, len(parts))
 	)
 	for _, p := range parts {
-		slice = Append(s.arena, slice, UnsafeString(p))
+		slice = Append(s.arena, slice, res.UnsafeString(p))
 	}
 	return slice
 }
@@ -452,11 +454,11 @@ func (s *Str) SplitAfter(str, sep string) []string {
 // SplitAfterN splits the string after each instance of sep with a maximum of n parts and allocates the result in the arena.
 func (s *Str) SplitAfterN(str, sep string, n int) []string {
 	var (
-		parts = bytes.SplitAfterN(UnsafeBytes(str), UnsafeBytes(sep), n)
+		parts = bytes.SplitAfterN(res.UnsafeBytes(str), res.UnsafeBytes(sep), n)
 		slice = MakeSlice[string](s.arena, 0, len(parts))
 	)
 	for _, p := range parts {
-		slice = Append(s.arena, slice, UnsafeString(p))
+		slice = Append(s.arena, slice, res.UnsafeString(p))
 	}
 	return slice
 }
@@ -571,7 +573,7 @@ func (s *Str) LastIndexFunc(str string, f func(rune) bool) int {
 // For full Unicode support, use MapUTF8.
 func (s *Str) MapASCII(mapping func(byte) int, str string) string {
 	var (
-		b   = UnsafeBytes(str)
+		b   = res.UnsafeBytes(str)
 		buf = NewBuffer(s.arena)
 	)
 

@@ -4,10 +4,11 @@ import (
 	"testing"
 
 	"github.com/thebagchi/arena-go"
+	"github.com/thebagchi/arena-go/alloca"
 )
 
 func TestSkipListInsertSearch(t *testing.T) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	defer a.Delete()
 
 	sl := arena.NewSkipList[int, string](a)
@@ -46,7 +47,7 @@ func TestSkipListInsertSearch(t *testing.T) {
 }
 
 func TestSkipListUpdate(t *testing.T) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	defer a.Delete()
 
 	sl := arena.NewSkipList[int, string](a)
@@ -69,7 +70,7 @@ func TestSkipListUpdate(t *testing.T) {
 }
 
 func TestSkipListDelete(t *testing.T) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	defer a.Delete()
 
 	sl := arena.NewSkipList[int, string](a)
@@ -100,7 +101,7 @@ func TestSkipListDelete(t *testing.T) {
 }
 
 func TestSkipListContains(t *testing.T) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	defer a.Delete()
 
 	sl := arena.NewSkipList[int, string](a)
@@ -120,7 +121,7 @@ func TestSkipListContains(t *testing.T) {
 }
 
 func TestSkipListMinMax(t *testing.T) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	defer a.Delete()
 
 	sl := arena.NewSkipList[int, string](a)
@@ -169,7 +170,7 @@ func TestSkipListMinMax(t *testing.T) {
 }
 
 func TestSkipListRange(t *testing.T) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	defer a.Delete()
 
 	sl := arena.NewSkipList[int, string](a)
@@ -211,7 +212,7 @@ func TestSkipListRange(t *testing.T) {
 }
 
 func TestSkipListLen(t *testing.T) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	defer a.Delete()
 
 	sl := arena.NewSkipList[int, string](a)
@@ -236,7 +237,7 @@ func TestSkipListLen(t *testing.T) {
 }
 
 func TestSkipListReset(t *testing.T) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	defer a.Delete()
 
 	sl := arena.NewSkipList[int, string](a)
@@ -257,7 +258,7 @@ func TestSkipListReset(t *testing.T) {
 }
 
 func TestSkipListClone(t *testing.T) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	defer a.Delete()
 
 	sl := arena.NewSkipList[int, string](a)
@@ -287,7 +288,7 @@ func TestSkipListClone(t *testing.T) {
 }
 
 func TestSkipListCloneSlice(t *testing.T) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	defer a.Delete()
 
 	sl := arena.NewSkipList[int, string](a)
@@ -333,7 +334,7 @@ func TestSkipListCloneSlice(t *testing.T) {
 }
 
 func TestSkipListIterators(t *testing.T) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	defer a.Delete()
 
 	sl := arena.NewSkipList[int, string](a)
@@ -391,7 +392,7 @@ func TestSkipListIterators(t *testing.T) {
 }
 
 func TestSkipListStringKeys(t *testing.T) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	defer a.Delete()
 
 	sl := arena.NewSkipList[string, int](a)
@@ -418,7 +419,7 @@ func TestSkipListStringKeys(t *testing.T) {
 }
 
 func TestSkipListFloatKeys(t *testing.T) {
-	a := arena.New(1, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
 	defer a.Delete()
 
 	sl := arena.NewSkipList[float64, string](a)
@@ -439,7 +440,7 @@ func TestSkipListFloatKeys(t *testing.T) {
 }
 
 func TestSkipListManyElements(t *testing.T) {
-	a := arena.New(10, arena.BUMP)
+	a := arena.New(alloca.NewBumpAllocator(10 * 4096))
 	defer a.Delete()
 
 	sl := arena.NewSkipList[int, int](a)
