@@ -5,14 +5,15 @@ import (
 	"testing"
 
 	arena "github.com/thebagchi/arena-go"
-	"github.com/thebagchi/arena-go/alloca"
+	"github.com/thebagchi/arena-go/alloc"
+	"github.com/thebagchi/arena-go/container"
 )
 
 func TestPool_Basic(t *testing.T) {
-	a := arena.New(alloca.NewBumpAllocator(10 * 4096))
+	a := arena.New(alloc.NewBumpAllocator(10 * 4096))
 	defer a.Delete()
 
-	p := arena.NewPool[int](a)
+	p := container.NewPool[int](a)
 
 	// Allocate first object
 	x := p.Alloc()
@@ -46,10 +47,10 @@ func TestPool_Basic(t *testing.T) {
 }
 
 func TestPool_MultipleObjects(t *testing.T) {
-	a := arena.New(alloca.NewBumpAllocator(10 * 4096))
+	a := arena.New(alloc.NewBumpAllocator(10 * 4096))
 	defer a.Delete()
 
-	p := arena.NewPool[int](a)
+	p := container.NewPool[int](a)
 
 	// Allocate multiple objects
 	ptrs := make([]*int, 100)
@@ -81,10 +82,10 @@ func TestPool_MultipleObjects(t *testing.T) {
 }
 
 func TestPool_Reset(t *testing.T) {
-	a := arena.New(alloca.NewBumpAllocator(10 * 4096))
+	a := arena.New(alloc.NewBumpAllocator(10 * 4096))
 	defer a.Delete()
 
-	p := arena.NewPool[int](a)
+	p := container.NewPool[int](a)
 
 	// Allocate all objects first, then free them
 	ptrs := make([]*int, 10)
@@ -114,10 +115,10 @@ func TestPool_Reset(t *testing.T) {
 }
 
 func TestPool_FreeNil(t *testing.T) {
-	a := arena.New(alloca.NewBumpAllocator(10 * 4096))
+	a := arena.New(alloc.NewBumpAllocator(10 * 4096))
 	defer a.Delete()
 
-	p := arena.NewPool[int](a)
+	p := container.NewPool[int](a)
 
 	// Should not panic
 	p.Free(nil)
@@ -133,10 +134,10 @@ func TestPool_StructTypes(t *testing.T) {
 		Right *Node
 	}
 
-	a := arena.New(alloca.NewBumpAllocator(10 * 4096))
+	a := arena.New(alloc.NewBumpAllocator(10 * 4096))
 	defer a.Delete()
 
-	p := arena.NewPool[Node](a)
+	p := container.NewPool[Node](a)
 
 	// Allocate a node
 	n1 := p.Alloc()
@@ -156,10 +157,10 @@ func TestPool_StructTypes(t *testing.T) {
 }
 
 func TestPool_ThreadSafety(t *testing.T) {
-	a := arena.New(alloca.NewBumpAllocator(1024 * 4096))
+	a := arena.New(alloc.NewBumpAllocator(1024 * 4096))
 	defer a.Delete()
 
-	p := arena.NewPool[int](a)
+	p := container.NewPool[int](a)
 
 	var wg sync.WaitGroup
 	workers := 10
@@ -190,8 +191,8 @@ func TestPool_ThreadSafety(t *testing.T) {
 }
 
 func TestPool_ArenaLifecycle(t *testing.T) {
-	a := arena.New(alloca.NewBumpAllocator(10 * 4096))
-	p := arena.NewPool[int](a)
+	a := arena.New(alloc.NewBumpAllocator(10 * 4096))
+	p := container.NewPool[int](a)
 
 	// Allocate some objects
 	ptrs := make([]*int, 10)
@@ -211,10 +212,10 @@ func TestPool_ArenaLifecycle(t *testing.T) {
 }
 
 func TestPool_DifferentAllocators(t *testing.T) {
-	a := arena.New(alloca.NewBumpAllocator(100 * 4096))
+	a := arena.New(alloc.NewBumpAllocator(100 * 4096))
 	defer a.Delete()
 
-	p := arena.NewPool[int](a)
+	p := container.NewPool[int](a)
 
 	// Allocate, use, free, reuse
 	x := p.Alloc()
@@ -236,10 +237,10 @@ func TestPool_LargeStructs(t *testing.T) {
 		ID   int
 	}
 
-	a := arena.New(alloca.NewBumpAllocator(1024 * 4096))
+	a := arena.New(alloc.NewBumpAllocator(1024 * 4096))
 	defer a.Delete()
 
-	p := arena.NewPool[LargeStruct](a)
+	p := container.NewPool[LargeStruct](a)
 
 	// Allocate and verify zeroing
 	s := p.Alloc()
@@ -265,9 +266,9 @@ func TestPool_LargeStructs(t *testing.T) {
 
 // Benchmarks
 func BenchmarkPool_Alloc(b *testing.B) {
-	a := arena.New(alloca.NewBumpAllocator(10240 * 4096))
+	a := arena.New(alloc.NewBumpAllocator(10240 * 4096))
 	defer a.Delete()
-	p := arena.NewPool[int](a)
+	p := container.NewPool[int](a)
 
 	b.ResetTimer()
 	b.ReportAllocs()
@@ -277,9 +278,9 @@ func BenchmarkPool_Alloc(b *testing.B) {
 }
 
 func BenchmarkPool_AllocFree(b *testing.B) {
-	a := arena.New(alloca.NewBumpAllocator(10240 * 4096))
+	a := arena.New(alloc.NewBumpAllocator(10240 * 4096))
 	defer a.Delete()
-	p := arena.NewPool[int](a)
+	p := container.NewPool[int](a)
 
 	b.ResetTimer()
 	b.ReportAllocs()
@@ -290,9 +291,9 @@ func BenchmarkPool_AllocFree(b *testing.B) {
 }
 
 func BenchmarkPool_AllocFreeReuse(b *testing.B) {
-	a := arena.New(alloca.NewBumpAllocator(10240 * 4096))
+	a := arena.New(alloc.NewBumpAllocator(10240 * 4096))
 	defer a.Delete()
-	p := arena.NewPool[int](a)
+	p := container.NewPool[int](a)
 
 	// Pre-populate free list
 	for i := 0; i < 100; i++ {
@@ -308,9 +309,9 @@ func BenchmarkPool_AllocFreeReuse(b *testing.B) {
 }
 
 func BenchmarkPool_Parallel(b *testing.B) {
-	a := arena.New(alloca.NewBumpAllocator(10240 * 4096))
+	a := arena.New(alloc.NewBumpAllocator(10240 * 4096))
 	defer a.Delete()
-	p := arena.NewPool[int](a)
+	p := container.NewPool[int](a)
 
 	b.ResetTimer()
 	b.ReportAllocs()
@@ -337,9 +338,9 @@ type BenchNode struct {
 }
 
 func BenchmarkPool_Struct(b *testing.B) {
-	a := arena.New(alloca.NewBumpAllocator(10240 * 4096))
+	a := arena.New(alloc.NewBumpAllocator(10240 * 4096))
 	defer a.Delete()
-	p := arena.NewPool[BenchNode](a)
+	p := container.NewPool[BenchNode](a)
 
 	b.ResetTimer()
 	b.ReportAllocs()

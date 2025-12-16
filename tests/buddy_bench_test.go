@@ -5,12 +5,12 @@ import (
 	"unsafe"
 
 	arena "github.com/thebagchi/arena-go"
-	"github.com/thebagchi/arena-go/alloca"
+	"github.com/thebagchi/arena-go/alloc"
 )
 
 // Benchmark basic allocation performance
 func BenchmarkBuddy_Alloc(b *testing.B) {
-	a := arena.New(alloca.NewBuddyAllocator())
+	a := arena.New(alloc.NewBuddyAllocator())
 	defer a.Delete()
 
 	b.ResetTimer()
@@ -21,7 +21,7 @@ func BenchmarkBuddy_Alloc(b *testing.B) {
 
 // Benchmark allocation with reset
 func BenchmarkBuddy_AllocWithReset(b *testing.B) {
-	a := arena.New(alloca.NewBuddyAllocator())
+	a := arena.New(alloc.NewBuddyAllocator())
 	defer a.Delete()
 
 	b.ResetTimer()
@@ -35,7 +35,7 @@ func BenchmarkBuddy_AllocWithReset(b *testing.B) {
 
 // Benchmark allocation and deallocation
 func BenchmarkBuddy_AllocFree(b *testing.B) {
-	a := arena.New(alloca.NewBuddyAllocator())
+	a := arena.New(alloc.NewBuddyAllocator())
 	defer a.Delete()
 
 	b.ResetTimer()
@@ -47,7 +47,7 @@ func BenchmarkBuddy_AllocFree(b *testing.B) {
 
 // Benchmark large allocations
 func BenchmarkBuddy_AllocLarge(b *testing.B) {
-	a := arena.New(alloca.NewBuddyAllocator())
+	a := arena.New(alloc.NewBuddyAllocator())
 	defer a.Delete()
 
 	type Large struct {
@@ -62,7 +62,7 @@ func BenchmarkBuddy_AllocLarge(b *testing.B) {
 
 // Benchmark mixed workload
 func BenchmarkBuddy_MixedWorkload(b *testing.B) {
-	a := arena.New(alloca.NewBuddyAllocator())
+	a := arena.New(alloc.NewBuddyAllocator())
 	defer a.Delete()
 
 	ptrs := make([]*int, 100)
@@ -80,7 +80,7 @@ func BenchmarkBuddy_MixedWorkload(b *testing.B) {
 
 // Benchmark Owns operation
 func BenchmarkBuddy_Owns(b *testing.B) {
-	a := arena.New(alloca.NewBuddyAllocator())
+	a := arena.New(alloc.NewBuddyAllocator())
 	defer a.Delete()
 
 	p := arena.Alloc[int](a)
@@ -94,7 +94,7 @@ func BenchmarkBuddy_Owns(b *testing.B) {
 
 // Benchmark parallel allocations
 func BenchmarkBuddy_AllocParallel(b *testing.B) {
-	a := arena.New(alloca.NewBuddyAllocator())
+	a := arena.New(alloc.NewBuddyAllocator())
 	defer a.Delete()
 
 	b.RunParallel(func(pb *testing.PB) {
@@ -107,7 +107,7 @@ func BenchmarkBuddy_AllocParallel(b *testing.B) {
 
 // Benchmark parallel alloc/free
 func BenchmarkBuddy_AllocFreeParallel(b *testing.B) {
-	a := arena.New(alloca.NewBuddyAllocator())
+	a := arena.New(alloc.NewBuddyAllocator())
 	defer a.Delete()
 
 	b.RunParallel(func(pb *testing.PB) {
@@ -134,7 +134,7 @@ func BenchmarkBuddy_AllocSizes(b *testing.B) {
 
 	for _, s := range sizes {
 		b.Run(s.name, func(b *testing.B) {
-			a := arena.New(alloca.NewBuddyAllocator())
+			a := arena.New(alloc.NewBuddyAllocator())
 			defer a.Delete()
 
 			b.ResetTimer()
@@ -147,7 +147,7 @@ func BenchmarkBuddy_AllocSizes(b *testing.B) {
 
 // Benchmark coalescing behavior
 func BenchmarkBuddy_Coalescing(b *testing.B) {
-	a := arena.New(alloca.NewBuddyAllocator())
+	a := arena.New(alloc.NewBuddyAllocator())
 	defer a.Delete()
 
 	b.ResetTimer()
@@ -174,7 +174,7 @@ func BenchmarkBuddy_Coalescing(b *testing.B) {
 // Benchmark comparison with standard allocator
 func BenchmarkBuddy_VsStandard_Alloc(b *testing.B) {
 	b.Run("Buddy", func(b *testing.B) {
-		a := arena.New(alloca.NewBuddyAllocator())
+		a := arena.New(alloc.NewBuddyAllocator())
 		defer a.Delete()
 
 		b.ResetTimer()
@@ -194,7 +194,7 @@ func BenchmarkBuddy_VsStandard_Alloc(b *testing.B) {
 // Benchmark comparison with BUMP allocator
 func BenchmarkBuddy_VsBump_Alloc(b *testing.B) {
 	b.Run("Buddy", func(b *testing.B) {
-		a := arena.New(alloca.NewBuddyAllocator())
+		a := arena.New(alloc.NewBuddyAllocator())
 		defer a.Delete()
 
 		b.ResetTimer()
@@ -204,7 +204,7 @@ func BenchmarkBuddy_VsBump_Alloc(b *testing.B) {
 	})
 
 	b.Run("Bump", func(b *testing.B) {
-		a := arena.New(alloca.NewBumpAllocator(100 * 4096))
+		a := arena.New(alloc.NewBumpAllocator(100 * 4096))
 		defer a.Delete()
 
 		b.ResetTimer()
@@ -216,7 +216,7 @@ func BenchmarkBuddy_VsBump_Alloc(b *testing.B) {
 
 // Benchmark fragmentation scenario
 func BenchmarkBuddy_Fragmentation(b *testing.B) {
-	a := arena.New(alloca.NewBuddyAllocator())
+	a := arena.New(alloc.NewBuddyAllocator())
 	defer a.Delete()
 
 	const count = 100
@@ -248,7 +248,7 @@ func BenchmarkBuddy_BatchAlloc(b *testing.B) {
 
 	for _, size := range sizes {
 		b.Run(string(rune('0'+size/10)), func(b *testing.B) {
-			a := arena.New(alloca.NewBuddyAllocator())
+			a := arena.New(alloc.NewBuddyAllocator())
 			defer a.Delete()
 
 			b.ResetTimer()

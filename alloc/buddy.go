@@ -1,13 +1,13 @@
 // (moved misplaced methods below)
 // buddy_per_chunk_bitmap.go
-package alloca
+package alloc
 
 import (
 	"fmt"
 	"sync"
 	"unsafe"
 
-	h "github.com/thebagchi/arena-go/alloca/cont"
+	h "github.com/thebagchi/arena-go/alloc/cont"
 	"github.com/thebagchi/arena-go/res"
 )
 

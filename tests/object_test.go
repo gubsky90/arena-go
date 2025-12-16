@@ -5,11 +5,11 @@ import (
 	"unsafe"
 
 	"github.com/thebagchi/arena-go"
-	"github.com/thebagchi/arena-go/alloca"
+	"github.com/thebagchi/arena-go/alloc"
 )
 
 func TestAppend(t *testing.T) {
-	a := arena.New(alloca.NewBumpAllocator(1024 * 4096))
+	a := arena.New(alloc.NewBumpAllocator(1024 * 4096))
 	defer a.Delete()
 
 	// Test basic append
@@ -49,7 +49,7 @@ func TestAppend(t *testing.T) {
 }
 
 func TestAppendStrings(t *testing.T) {
-	a := arena.New(alloca.NewBumpAllocator(1024 * 4096))
+	a := arena.New(alloc.NewBumpAllocator(1024 * 4096))
 	defer a.Delete()
 
 	slice := arena.MakeSlice[string](a, 1, 2)
@@ -68,7 +68,7 @@ func TestAppendStrings(t *testing.T) {
 }
 
 func TestOwns(t *testing.T) {
-	a := arena.New(alloca.NewBumpAllocator(1024 * 4096))
+	a := arena.New(alloc.NewBumpAllocator(1024 * 4096))
 	defer a.Delete()
 
 	// Test nil pointer
@@ -106,7 +106,7 @@ func TestOwns(t *testing.T) {
 }
 
 func TestPtr(t *testing.T) {
-	a := arena.New(alloca.NewBumpAllocator(1024 * 4096))
+	a := arena.New(alloc.NewBumpAllocator(1024 * 4096))
 	defer a.Delete()
 
 	// Test with int

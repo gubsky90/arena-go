@@ -8,12 +8,13 @@
 // • Full iterator support (Go 1.23+)
 // • Range loop compatibility
 // • Sorting, searching, and manipulation operations
-package arena
+package container
 
 import (
 	"iter"
 	"sort"
 
+	arena "github.com/thebagchi/arena-go"
 	"github.com/thebagchi/arena-go/res"
 )
 
@@ -68,7 +69,7 @@ import (
 // fmt.Println(v)
 // }
 type Vec[T any] struct {
-	arena *Arena
+	arena *arena.Arena
 	data  []T
 }
 
@@ -164,7 +165,7 @@ func (s *Vec[T]) ensure(needed int) {
 	}
 
 	// Use MakeSlice from object.go to allocate from arena
-	temp := MakeSlice[T](s.arena, len(s.data), capacity)
+	temp := arena.MakeSlice[T](s.arena, len(s.data), capacity)
 	copy(temp, s.data)
 	s.arena.Remove(res.AsUnsafePointerSlice(s.data))
 	s.data = temp
@@ -225,13 +226,13 @@ func (s *Vec[T]) Clone() []T {
 // for i := 0; i < 100; i++ {
 // large.AppendOne(i)
 // }
-func NewVec[T any](a *Arena, initial ...T) *Vec[T] {
+func NewVec[T any](a *arena.Arena, initial ...T) *Vec[T] {
 	as := &Vec[T]{arena: a}
 	if len(initial) > 0 {
 		as.AppendSlice(initial)
 	} else {
 		// Pre-allocate SSO capacity for empty slices
-		as.data = MakeSlice[T](a, 0, SSO_THRESHOLD)
+		as.data = arena.MakeSlice[T](a, 0, SSO_THRESHOLD)
 	}
 	return as
 }

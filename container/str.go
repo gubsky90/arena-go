@@ -1,4 +1,4 @@
-package arena
+package container
 
 import (
 	"bytes"
@@ -6,16 +6,17 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/thebagchi/arena-go"
 	"github.com/thebagchi/arena-go/res"
 )
 
 // Str is a string utility struct that holds an arena reference for memory management.
 type Str struct {
-	arena *Arena
+	arena *arena.Arena
 }
 
 // NewStr creates a new Str instance with the given arena.
-func NewStr(a *Arena) *Str {
+func NewStr(a *arena.Arena) *Str {
 	return &Str{arena: a}
 }
 
@@ -189,10 +190,10 @@ func (s *Str) Split(str, sep string) []string {
 		// Split into individual runes
 		var (
 			n     = utf8.RuneCountInString(str)
-			slice = MakeSlice[string](s.arena, 0, n)
+			slice = arena.MakeSlice[string](s.arena, 0, n)
 		)
 		for _, r := range str {
-			slice = Append(s.arena, slice, string(r))
+			slice = arena.Append(s.arena, slice, string(r))
 		}
 		return slice
 	}
@@ -200,7 +201,7 @@ func (s *Str) Split(str, sep string) []string {
 	// Count occurrences to pre-allocate with exact capacity
 	var (
 		n     = bytes.Count(res.UnsafeBytes(str), res.UnsafeBytes(sep)) + 1
-		slice = MakeSlice[string](s.arena, 0, n)
+		slice = arena.MakeSlice[string](s.arena, 0, n)
 	)
 
 	// Manually split to avoid intermediate allocations
@@ -212,11 +213,11 @@ func (s *Str) Split(str, sep string) []string {
 		idx := s.Index(str[start:], sep)
 		if idx < 0 {
 			// Add remaining part
-			slice = Append(s.arena, slice, str[start:])
+			slice = arena.Append(s.arena, slice, str[start:])
 			break
 		}
 		// Add part before separator
-		slice = Append(s.arena, slice, str[start:start+idx])
+		slice = arena.Append(s.arena, slice, str[start:start+idx])
 		start = start + (idx + length)
 	}
 	return slice
@@ -234,7 +235,7 @@ func (s *Str) Join(elems []string, sep string) string {
 	}
 	// Allocate in arena
 	var (
-		data = MakeSlice[byte](s.arena, length, length)
+		data = arena.MakeSlice[byte](s.arena, length, length)
 		pos  = 0
 	)
 	for i, e := range elems {
@@ -273,7 +274,7 @@ func (s *Str) Fields(str string) []string {
 	}
 
 	var (
-		slice = MakeSlice[string](s.arena, 0, n)
+		slice = arena.MakeSlice[string](s.arena, 0, n)
 		start = -1
 	)
 	for i, r := range str {
@@ -283,12 +284,12 @@ func (s *Str) Fields(str string) []string {
 				start = i
 			}
 		} else if isSpace {
-			slice = Append(s.arena, slice, str[start:i])
+			slice = arena.Append(s.arena, slice, str[start:i])
 			start = -1
 		}
 	}
 	if start >= 0 {
-		slice = Append(s.arena, slice, str[start:])
+		slice = arena.Append(s.arena, slice, str[start:])
 	}
 
 	return slice
@@ -431,10 +432,10 @@ func (s *Str) CutSuffix(str, suffix string) (before string, found bool) {
 func (s *Str) SplitN(str, sep string, n int) []string {
 	var (
 		parts = bytes.SplitN(res.UnsafeBytes(str), res.UnsafeBytes(sep), n)
-		slice = MakeSlice[string](s.arena, 0, len(parts))
+		slice = arena.MakeSlice[string](s.arena, 0, len(parts))
 	)
 	for _, p := range parts {
-		slice = Append(s.arena, slice, res.UnsafeString(p))
+		slice = arena.Append(s.arena, slice, res.UnsafeString(p))
 	}
 	return slice
 }
@@ -443,10 +444,10 @@ func (s *Str) SplitN(str, sep string, n int) []string {
 func (s *Str) SplitAfter(str, sep string) []string {
 	var (
 		parts = bytes.SplitAfter(res.UnsafeBytes(str), res.UnsafeBytes(sep))
-		slice = MakeSlice[string](s.arena, 0, len(parts))
+		slice = arena.MakeSlice[string](s.arena, 0, len(parts))
 	)
 	for _, p := range parts {
-		slice = Append(s.arena, slice, res.UnsafeString(p))
+		slice = arena.Append(s.arena, slice, res.UnsafeString(p))
 	}
 	return slice
 }
@@ -455,10 +456,10 @@ func (s *Str) SplitAfter(str, sep string) []string {
 func (s *Str) SplitAfterN(str, sep string, n int) []string {
 	var (
 		parts = bytes.SplitAfterN(res.UnsafeBytes(str), res.UnsafeBytes(sep), n)
-		slice = MakeSlice[string](s.arena, 0, len(parts))
+		slice = arena.MakeSlice[string](s.arena, 0, len(parts))
 	)
 	for _, p := range parts {
-		slice = Append(s.arena, slice, res.UnsafeString(p))
+		slice = arena.Append(s.arena, slice, res.UnsafeString(p))
 	}
 	return slice
 }
@@ -514,7 +515,7 @@ func (s *Str) FieldsFunc(str string, f func(rune) bool) []string {
 	}
 
 	var (
-		slice = MakeSlice[string](s.arena, 0, n)
+		slice = arena.MakeSlice[string](s.arena, 0, n)
 		start = -1
 	)
 	for i, r := range str {
@@ -523,12 +524,12 @@ func (s *Str) FieldsFunc(str string, f func(rune) bool) []string {
 				start = i
 			}
 		} else if f(r) {
-			slice = Append(s.arena, slice, str[start:i])
+			slice = arena.Append(s.arena, slice, str[start:i])
 			start = -1
 		}
 	}
 	if start >= 0 {
-		slice = Append(s.arena, slice, str[start:])
+		slice = arena.Append(s.arena, slice, str[start:])
 	}
 
 	return slice

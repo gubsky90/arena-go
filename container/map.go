@@ -1,10 +1,12 @@
-package arena
+package container
 
 import (
 	"hash/maphash"
 	"iter"
 	"sync"
 	"unsafe"
+
+	arena "github.com/thebagchi/arena-go"
 )
 
 const INITIAL_BUCKET_COUNT = 16 // Initial number of buckets in the hash map
@@ -15,7 +17,7 @@ const INITIAL_BUCKET_COUNT = 16 // Initial number of buckets in the hash map
 // Multiple goroutines can safely call Get concurrently, while Set/Delete operations are serialized.
 type Map[K comparable, V any] struct {
 	mtx     sync.RWMutex
-	arena   *Arena
+	arena   *arena.Arena
 	buckets *Vec[*entry[K, V]] // arena-backed bucket array (array of pointers to chain heads)
 	count   int
 	cap     int
@@ -32,7 +34,7 @@ type entry[K comparable, V any] struct {
 }
 
 // NewMap creates a new Map with separate chaining for collision resolution
-func NewMap[K comparable, V any](a *Arena) *Map[K, V] {
+func NewMap[K comparable, V any](a *arena.Arena) *Map[K, V] {
 	// Create arena-backed vec for buckets
 	buckets := NewVec[*entry[K, V]](a)
 

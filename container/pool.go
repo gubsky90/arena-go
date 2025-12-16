@@ -1,9 +1,11 @@
 // pool.go — Type-safe, zero-GC object pool using Arena allocator
-package arena
+package container
 
 import (
 	"sync"
 	"unsafe"
+
+	arena "github.com/thebagchi/arena-go"
 )
 
 // Pool[T] is a high-performance, type-safe object pool that allocates from an Arena.
@@ -15,15 +17,15 @@ import (
 //   - Multiple goroutines can safely allocate and free concurrently
 //   - Pool shares the Arena's lifecycle - when Arena is deleted, all Pool memory is freed
 type Pool[T any] struct {
-	arena       *Arena
+	arena       *arena.Arena
 	size        uintptr
 	allocations *Vec[*T]
-	mtx      sync.Mutex
+	mtx         sync.Mutex
 }
 
 // NewPool creates a new object pool for type T that allocates from the given Arena.
 // All allocations are 16-byte aligned for optimal performance.
-func NewPool[T any](a *Arena) *Pool[T] {
+func NewPool[T any](a *arena.Arena) *Pool[T] {
 	size := unsafe.Sizeof(*new(T))
 	if size == 0 {
 		size = 1

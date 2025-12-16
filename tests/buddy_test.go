@@ -5,11 +5,11 @@ import (
 	"unsafe"
 
 	arena "github.com/thebagchi/arena-go"
-	"github.com/thebagchi/arena-go/alloca"
+	"github.com/thebagchi/arena-go/alloc"
 )
 
 func TestBuddy_BasicAllocation(t *testing.T) {
-	a := arena.New(alloca.NewBuddyAllocator())
+	a := arena.New(alloc.NewBuddyAllocator())
 	defer a.Delete()
 
 	// Allocate various sizes
@@ -34,7 +34,7 @@ func TestBuddy_BasicAllocation(t *testing.T) {
 }
 
 func TestBuddy_RemoveAndReuse(t *testing.T) {
-	a := arena.New(alloca.NewBuddyAllocator())
+	a := arena.New(alloc.NewBuddyAllocator())
 	defer a.Delete()
 
 	// Allocate and free
@@ -63,7 +63,7 @@ func TestBuddy_RemoveAndReuse(t *testing.T) {
 }
 
 func TestBuddy_MultipleAllocations(t *testing.T) {
-	a := arena.New(alloca.NewBuddyAllocator())
+	a := arena.New(alloc.NewBuddyAllocator())
 	defer a.Delete()
 
 	const count = 100
@@ -94,7 +94,7 @@ func TestBuddy_MultipleAllocations(t *testing.T) {
 }
 
 func TestBuddy_Coalescing(t *testing.T) {
-	a := arena.New(alloca.NewBuddyAllocator())
+	a := arena.New(alloc.NewBuddyAllocator())
 	defer a.Delete()
 
 	// Allocate multiple small blocks
@@ -129,7 +129,7 @@ func TestBuddy_Coalescing(t *testing.T) {
 }
 
 func TestBuddy_Reset(t *testing.T) {
-	a := arena.New(alloca.NewBuddyAllocator())
+	a := arena.New(alloc.NewBuddyAllocator())
 	defer a.Delete()
 
 	// Allocate some memory
@@ -153,7 +153,7 @@ func TestBuddy_Reset(t *testing.T) {
 }
 
 func TestBuddy_LargeAllocation(t *testing.T) {
-	a := arena.New(alloca.NewBuddyAllocator())
+	a := arena.New(alloc.NewBuddyAllocator())
 	defer a.Delete()
 
 	// Allocate large structure
@@ -175,7 +175,7 @@ func TestBuddy_LargeAllocation(t *testing.T) {
 }
 
 func TestBuddy_Owns(t *testing.T) {
-	a := arena.New(alloca.NewBuddyAllocator())
+	a := arena.New(alloc.NewBuddyAllocator())
 	defer a.Delete()
 
 	p := arena.Alloc[int](a)
@@ -196,7 +196,7 @@ func TestBuddy_Owns(t *testing.T) {
 }
 
 func TestBuddy_ZeroSizedType(t *testing.T) {
-	a := arena.New(alloca.NewBuddyAllocator())
+	a := arena.New(alloc.NewBuddyAllocator())
 	defer a.Delete()
 
 	type Empty struct{}
@@ -211,7 +211,7 @@ func TestBuddy_ZeroSizedType(t *testing.T) {
 }
 
 func TestBuddy_AlignedAllocation(t *testing.T) {
-	a := arena.New(alloca.NewBuddyAllocator())
+	a := arena.New(alloc.NewBuddyAllocator())
 	defer a.Delete()
 
 	p := arena.Alloc[uint64](a)
@@ -227,7 +227,7 @@ func TestBuddy_AlignedAllocation(t *testing.T) {
 }
 
 func TestBuddy_InterleavedAllocFree(t *testing.T) {
-	a := arena.New(alloca.NewBuddyAllocator())
+	a := arena.New(alloc.NewBuddyAllocator())
 	defer a.Delete()
 
 	// Test alloc/free/alloc cycle with Reset instead of Remove
@@ -259,7 +259,7 @@ func TestBuddy_InterleavedAllocFree(t *testing.T) {
 
 func TestBuddy_MultipleChunks(t *testing.T) {
 	// Start with multiple chunks
-	a := arena.New(alloca.NewBuddyAllocator())
+	a := arena.New(alloc.NewBuddyAllocator())
 	defer a.Delete()
 
 	const count = 200
@@ -291,7 +291,7 @@ func TestBuddy_MultipleChunks(t *testing.T) {
 
 func TestBuddy_OversizedAllocation(t *testing.T) {
 	// Create buddy allocator with small chunk size
-	a := arena.New(alloca.NewBuddyAllocator())
+	a := arena.New(alloc.NewBuddyAllocator())
 	defer a.Delete()
 
 	// Allocate something larger than chunk size (4KB default)

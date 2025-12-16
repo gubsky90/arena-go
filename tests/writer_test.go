@@ -4,12 +4,14 @@ import (
 	"testing"
 
 	"github.com/thebagchi/arena-go"
-	"github.com/thebagchi/arena-go/alloca"
+	"github.com/thebagchi/arena-go/alloc"
+	iopackage "github.com/thebagchi/arena-go/io"
 )
 
 func TestWriter(t *testing.T) {
-	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
-	w := arena.NewWriter(a)
+	a := arena.New(alloc.NewBumpAllocator(1 * 4096))
+	defer a.Delete()
+	w := iopackage.NewWriter(a)
 
 	// Test Write
 	n, err := w.Write([]byte("hello"))

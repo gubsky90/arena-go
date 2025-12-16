@@ -1,4 +1,4 @@
-package alloca
+package alloc
 
 import (
 	"unsafe"

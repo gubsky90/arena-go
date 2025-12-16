@@ -1,13 +1,15 @@
-package arena
+package container
 
 import (
 	"unsafe"
+
+	arena "github.com/thebagchi/arena-go"
 )
 
 // Buffer is a string builder for arena allocators, similar to bytes.Buffer.
 // All memory is allocated from the arena, never from the heap.
 type Buffer struct {
-	arena *Arena
+	arena *arena.Arena
 	buf   []byte
 }
 
@@ -50,7 +52,7 @@ func (s *Buffer) grow(needed int) {
 	}
 	capacity := max(max(cap(s.buf)*2, len(s.buf)+needed), 64)
 
-	buffer := MakeSlice[byte](s.arena, len(s.buf), capacity)
+	buffer := arena.MakeSlice[byte](s.arena, len(s.buf), capacity)
 	copy(buffer, s.buf)
 
 	// Remove old buffer from arena
@@ -95,19 +97,19 @@ func (s *Buffer) CloneBytes() []byte {
 }
 
 // NewBuffer creates a new Buffer backed by the arena with initial 32-byte capacity
-func NewBuffer(a *Arena) *Buffer {
+func NewBuffer(a *arena.Arena) *Buffer {
 	return &Buffer{
 		arena: a,
-		buf:   MakeSlice[byte](a, 0, 32),
+		buf:   arena.MakeSlice[byte](a, 0, 32),
 	}
 }
 
 // NewBufferString creates a new Buffer with initial string content
-func NewBufferString(a *Arena, s string) *Buffer {
+func NewBufferString(a *arena.Arena, s string) *Buffer {
 	capacity := max(len(s)*2, 32)
 	buf := &Buffer{
 		arena: a,
-		buf:   MakeSlice[byte](a, 0, capacity),
+		buf:   arena.MakeSlice[byte](a, 0, capacity),
 	}
 	buf.AppendString(s)
 	return buf

@@ -4,14 +4,16 @@ import (
 	"io"
 	"testing"
 
-	arena "github.com/thebagchi/arena-go"
-	"github.com/thebagchi/arena-go/alloca"
+	"github.com/thebagchi/arena-go"
+	"github.com/thebagchi/arena-go/alloc"
+	iopackage "github.com/thebagchi/arena-go/io"
 )
 
 func TestReader(t *testing.T) {
-	a := arena.New(alloca.NewBumpAllocator(1 * 4096))
+	a := arena.New(alloc.NewBumpAllocator(1 * 4096))
+	defer a.Delete()
 	data := []byte("hello world")
-	reader := arena.NewReader(a, data)
+	reader := iopackage.NewReader(a, data)
 
 	// Test Read
 	buf := make([]byte, 5)

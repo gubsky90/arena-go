@@ -1,11 +1,13 @@
 // skiplist.go — The Ultimate Arena-Backed Skip List
-package arena
+package container
 
 import (
 	"iter"
 	"math/rand"
 	"sync"
 	"unsafe"
+
+	arena "github.com/thebagchi/arena-go"
 )
 
 type signedInteger interface {
@@ -45,7 +47,7 @@ func RandomLevel() int {
 // All operations (Search, Insert, Delete, Range) are protected by RWMutex.
 // Memory is allocated entirely from the arena, avoiding GC pressure.
 type SkipList[K ordered, V any] struct {
-	arena *Arena
+	arena *arena.Arena
 	head  *node[K, V]
 	level int
 	lock  sync.RWMutex
@@ -63,11 +65,11 @@ type node[K ordered, V any] struct {
 	forward []*node[K, V]
 }
 
-func NewSkipList[K ordered, V any](a *Arena) *SkipList[K, V] {
+func NewSkipList[K ordered, V any](a *arena.Arena) *SkipList[K, V] {
 	// Allocate head node
 	head := (*node[K, V])(a.Allocator.Alloc(uint64(unsafe.Sizeof(node[K, V]{})), 16))
 	head.level = DEFAULT_MAX_LEVEL
-	head.forward = MakeSlice[*node[K, V]](a, DEFAULT_MAX_LEVEL+1, DEFAULT_MAX_LEVEL+1)
+	head.forward = arena.MakeSlice[*node[K, V]](a, DEFAULT_MAX_LEVEL+1, DEFAULT_MAX_LEVEL+1)
 
 	return &SkipList[K, V]{
 		arena: a,
@@ -128,7 +130,7 @@ func (sl *SkipList[K, V]) Insert(key K, value V) {
 	n.key = key
 	n.value = value
 	n.level = level
-	n.forward = MakeSlice[*node[K, V]](sl.arena, level+1, level+1)
+	n.forward = arena.MakeSlice[*node[K, V]](sl.arena, level+1, level+1)
 
 	for i := range level + 1 {
 		n.forward[i] = update[i].forward[i]

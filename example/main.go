@@ -5,7 +5,9 @@ import (
 	"fmt"
 
 	"github.com/thebagchi/arena-go"
-	"github.com/thebagchi/arena-go/alloca"
+	"github.com/thebagchi/arena-go/alloc"
+	"github.com/thebagchi/arena-go/container"
+	arenaio "github.com/thebagchi/arena-go/io"
 )
 
 // Example struct for pointer demonstration
@@ -22,7 +24,7 @@ func serializePersonToJSON(a *arena.Arena, name string, age int) string {
 	person := arena.Ptr(a, Person{Name: arenaName, Age: age})
 
 	// Create Writer in arena
-	writer := arena.NewWriter(a)
+	writer := arenaio.NewWriter(a)
 
 	// Serialize to JSON
 	encoder := json.NewEncoder(writer)
@@ -37,14 +39,14 @@ func serializePersonToJSON(a *arena.Arena, name string, age int) string {
 
 func main() {
 	// Create an arena with 4KB memory
-	a := arena.New(alloca.NewBumpAllocator(4096))
+	a := arena.New(alloc.NewBumpAllocator(4096))
 	defer a.Delete()
 
 	fmt.Println("=== ArenaSlice Examples ===")
 
 	// 1. Integer slice
 	fmt.Println("\n1. Integer Slice:")
-	intSlice := arena.NewVec[int](a)
+	intSlice := container.NewVec[int](a)
 	intSlice.AppendSlice([]int{1, 2, 3, 4, 5})
 	intSlice.Append(6, 7, 8) // Append multiple at once
 
@@ -59,7 +61,8 @@ func main() {
 
 	// 2. String slice
 	fmt.Println("\n2. String Slice:")
-	stringSlice := arena.NewVec[string](a, "hello", "world")
+	stringSlice := container.NewVec[string](a)
+	stringSlice.Append("hello", "world")
 	stringSlice.AppendSlice([]string{"arena", "memory"})
 	stringSlice.Push("allocation") // Using Push alias
 
@@ -79,7 +82,7 @@ func main() {
 	person3 := arena.Ptr(a, Person{Name: "Charlie", Age: 35})
 
 	// Create a slice of pointers to Person
-	pointerSlice := arena.NewVec[*Person](a)
+	pointerSlice := container.NewVec[*Person](a)
 	pointerSlice.Append(person1, person2, person3)
 
 	fmt.Printf("Number of people: %d\n", pointerSlice.Len())
@@ -108,7 +111,7 @@ func main() {
 
 	// 5. String to int map
 	fmt.Println("\n5. String to Int Map:")
-	stringMap := arena.NewMap[string, int](a)
+	stringMap := container.NewMap[string, int](a)
 	stringMap.Set("alice", 30)
 	stringMap.Set("bob", 25)
 	stringMap.Set("charlie", 35)
@@ -132,7 +135,6 @@ func main() {
 		return true
 	})
 
-	// Update and delete
 	stringMap.Set("alice", 31) // Update
 	stringMap.Delete("bob")    // Delete
 
@@ -192,7 +194,7 @@ func main() {
 	// Demonstrate Reader
 	fmt.Println("\n=== Reader Example ===")
 	data := []byte("arena-based reading")
-	reader := arena.NewReader(a, data)
+	reader := arenaio.NewReader(a, data)
 	readBuf := make([]byte, 10)
 	n, err := reader.Read(readBuf)
 	if err != nil {
