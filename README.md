@@ -47,11 +47,17 @@ a := arena.New(alloc.NewBumpAllocator(1024 * 4096)) // 4MB
 ```
 
 ### Slab Allocator
-Best for fixed-size objects with high allocation/free turnover.
+Best for fixed-size objects with high allocation/free turnover. Features a multi-tiered design with 17 size classes (16B to 1MB), exhausted/available slab tracking, and in-object free lists for efficient memory management.
 
 ```go
-a := arena.New(alloc.NewSlabAllocator(1024 * 4096))
+a := arena.New(alloc.NewSlabAllocator())
 ```
+
+**Architecture highlights:**
+- 17 size classes for objects from 16 bytes to 1MB
+- Per-size-class bins with exhausted and available slab lists
+- In-object free lists for O(1) allocation/deallocation
+- Cross-bin free page pool for efficient memory recycling
 
 ### Buddy Allocator
 Most flexible, good for varied-size allocations with power-of-2 sizes.
@@ -123,6 +129,43 @@ fmt.Println(idx) // 2
 // Clear
 vec.Clear()
 fmt.Println(vec.Len()) // 0
+```
+
+### List - Generic Doubly-Linked List
+
+```go
+import "github.com/thebagchi/arena-go/alloc/cont"
+
+// Create a list (works with any type)
+list := cont.NewList[int]()
+
+// Add elements
+list.PushBack(1)
+list.PushBack(2)
+list.PushFront(0)
+
+// Iterate
+for it := list.Iter(); ; {
+    val, ok := it.Next()
+    if !ok {
+        break
+    }
+    fmt.Println(val)
+}
+
+// Remove elements
+if node := list.Front(); node != nil {
+    list.Remove(node)
+}
+
+// Insert operations
+node := list.Front()
+list.InsertAfter(10, node)  // Insert after node
+list.InsertBefore(5, node)  // Insert before node
+
+// Move operations
+list.MoveToFront(node)      // Move to front
+list.MoveToBack(node)       // Move to back
 ```
 
 ### Map - Type-Safe Hash Map
@@ -351,7 +394,12 @@ go run ./example/main.go
 - `object.go` - Basic object allocation utilities
 - `io/` - I/O operations (Reader, Writer)
 - `container/` - Generic containers (Vec, Map, SkipList, Pool, Str)
-- `alloc/` - Allocator implementations (Bump, Slab, Buddy)
+- `alloc/` - Allocator implementations
+  - `bump.go` - Bump allocator (linear allocation)
+  - `slab.go` - Slab allocator (fixed-size object pools with 17 size classes)
+  - `buddy.go` - Buddy allocator (power-of-2 flexible allocation)
+  - `cont/` - Internal data structures (List, Cont)
+- `res/` - Resource management (page allocation)
 
 ## License
 
