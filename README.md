@@ -131,43 +131,6 @@ vec.Clear()
 fmt.Println(vec.Len()) // 0
 ```
 
-### List - Generic Doubly-Linked List
-
-```go
-import "github.com/thebagchi/arena-go/alloc/cont"
-
-// Create a list (works with any type)
-list := cont.NewList[int]()
-
-// Add elements
-list.PushBack(1)
-list.PushBack(2)
-list.PushFront(0)
-
-// Iterate
-for it := list.Iter(); ; {
-    val, ok := it.Next()
-    if !ok {
-        break
-    }
-    fmt.Println(val)
-}
-
-// Remove elements
-if node := list.Front(); node != nil {
-    list.Remove(node)
-}
-
-// Insert operations
-node := list.Front()
-list.InsertAfter(10, node)  // Insert after node
-list.InsertBefore(5, node)  // Insert before node
-
-// Move operations
-list.MoveToFront(node)      // Move to front
-list.MoveToBack(node)       // Move to back
-```
-
 ### Map - Type-Safe Hash Map
 
 ```go
