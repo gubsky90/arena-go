@@ -318,6 +318,30 @@ func (a *SlabAllocator) Delete() {
 	a.freePages = nil
 }
 
+func (a *SlabAllocator) Remove(ptr unsafe.Pointer) {
+	if ptr == nil {
+		return
+	}
+
+	// Find which bin owns this pointer and free it
+	for i := range a.bins {
+		bin := a.bins[i]
+		if bin == nil {
+			continue
+		}
+
+		// Check if slab is in this bin
+		bin.mtx.Lock()
+		slab := a.findSlab(bin, ptr)
+		bin.mtx.Unlock()
+
+		if slab != nil {
+			a.binFree(bin, ptr)
+			return
+		}
+	}
+}
+
 func (a *SlabAllocator) Owns(ptr unsafe.Pointer) bool {
 	if ptr == nil || a.res == nil {
 		return false
