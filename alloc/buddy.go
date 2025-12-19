@@ -7,7 +7,7 @@ import (
 	"sync"
 	"unsafe"
 
-	h "github.com/thebagchi/arena-go/alloc/cont"
+	"github.com/thebagchi/arena-go/alloc/cont"
 	"github.com/thebagchi/arena-go/res"
 )
 
@@ -47,8 +47,7 @@ var (
 	MIN_CHUNK_SIZE = (res.PAGE_SIZE * 8 * MIN_BLOCK_SIZE) + res.PAGE_SIZE
 )
 
-type FreeList = h.List[unsafe.Pointer]
-type FreeListList = h.Array[*FreeList]
+type FreeList = cont.List[unsafe.Pointer]
 
 // Bitmap is a bit vector for tracking allocation state in a chunk.
 type Bitmap struct {
@@ -102,7 +101,7 @@ func (b *Bitmap) Reset() {
 
 type BuddyAllocator struct {
 	res   *res.Res
-	free  *FreeListList
+	free  []*FreeList
 	order int
 	mtx   sync.Mutex
 }
@@ -110,7 +109,7 @@ type BuddyAllocator struct {
 func NewBuddyAllocator() *BuddyAllocator {
 	a := &BuddyAllocator{
 		res:  res.NewRes(MIN_CHUNK_SIZE),
-		free: h.NewArray[*FreeList](32),
+		free: make([]*FreeList, 0, 32),
 	}
 	a.mtx.Lock()
 	a.initializeFreeListList()
@@ -146,13 +145,13 @@ func blockIndex(ptr uintptr, chunk []byte) int {
 
 // registerAllChunksAsFree treats every chunk as one large free buddy block
 func (a *BuddyAllocator) initializeFreeListList() {
-	for i := 0; i < a.free.Len(); i++ {
-		fl := a.free.Get(i)
+	for i := 0; i < len(a.free); i++ {
+		fl := a.free[i]
 		if fl != nil && !fl.IsEmpty() {
 			fl.Reset()
-			a.free.Set(i, fl)
 		}
 	}
+	a.free = a.free[:0]
 	a.order = 0
 	for _, chunk := range a.res.Chunks() {
 		usable := blockSize(chunk.Base())
@@ -380,13 +379,15 @@ func (a *BuddyAllocator) getFreeList(order int) *FreeList {
 	if idx < 0 {
 		panic("invalid buddy order")
 	}
-	if idx >= a.free.Len() {
-		a.free.Resize(idx + 16)
+	if idx >= len(a.free) {
+		// Grow the slice
+		newSize := idx + 16
+		a.free = append(a.free, make([]*FreeList, newSize-len(a.free))...)
 	}
-	fl := a.free.Get(idx)
+	fl := a.free[idx]
 	if fl == nil {
-		fl = h.NewList[unsafe.Pointer]()
-		a.free.Set(idx, fl)
+		fl = cont.NewList[unsafe.Pointer]()
+		a.free[idx] = fl
 	}
 	return fl
 }
@@ -413,9 +414,9 @@ func (a *BuddyAllocator) DebugDump() {
 	a.mtx.Lock()
 	defer a.mtx.Unlock()
 	fmt.Println("=== Buddy Allocator Free Lists ===")
-	for i := 0; i < a.free.Len(); i++ {
-		fl := a.free.Get(i)
-		if fl.IsEmpty() {
+	for i := 0; i < len(a.free); i++ {
+		fl := a.free[i]
+		if fl == nil || fl.IsEmpty() {
 			continue
 		}
 		var (

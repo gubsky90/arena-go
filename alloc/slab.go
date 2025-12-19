@@ -6,7 +6,6 @@ import (
 	"sync"
 	"unsafe"
 
-	"github.com/thebagchi/arena-go/alloc/cont"
 	"github.com/thebagchi/arena-go/res"
 )
 
@@ -22,7 +21,7 @@ var SIZE_CLASSES = [NUM_CLASSES]uint64{
 type SlabAllocator struct {
 	res       *res.Res
 	bins      [NUM_CLASSES]*Bin
-	freePages *cont.List[*res.Page]
+	freePages []*res.Page
 	mtx       sync.Mutex
 }
 
@@ -30,8 +29,8 @@ type SlabAllocator struct {
 type Bin struct {
 	size      uint64
 	align     uint64
-	exhausted *cont.List[*Slab]
-	available *cont.List[*Slab] // multiple available slabs (LIFO)
+	exhausted []*Slab
+	available []*Slab // multiple available slabs (LIFO)
 	mtx       sync.Mutex
 }
 
@@ -45,15 +44,15 @@ type Slab struct {
 func NewSlabAllocator() *SlabAllocator {
 	a := &SlabAllocator{
 		res:       res.NewRes(0),
-		freePages: cont.NewList[*res.Page](),
+		freePages: make([]*res.Page, 0),
 	}
 
 	for i := range a.bins {
 		a.bins[i] = &Bin{
 			size:      SIZE_CLASSES[i],
 			align:     8,
-			exhausted: cont.NewList[*Slab](),
-			available: cont.NewList[*Slab](),
+			exhausted: make([]*Slab, 0),
+			available: make([]*Slab, 0),
 		}
 	}
 
@@ -93,14 +92,15 @@ func (a *SlabAllocator) Alloc(size, align uint64) unsafe.Pointer {
 	}
 
 	bin := a.bins[id]
-	return bin.Alloc(a)
+	return a.binAlloc(bin)
 }
 
 // AllocatePage returns a page for a bin, either from the free pool or by allocating a new one
 func (a *SlabAllocator) AllocatePage(size uint64) *res.Page {
 	a.mtx.Lock()
-	if !a.freePages.IsEmpty() {
-		page, _ := a.freePages.PopBack()
+	if len(a.freePages) > 0 {
+		page := a.freePages[len(a.freePages)-1]
+		a.freePages = a.freePages[:len(a.freePages)-1]
 		a.mtx.Unlock()
 		return page
 	}
@@ -135,47 +135,35 @@ func (a *SlabAllocator) Free(ptr unsafe.Pointer) {
 	defer a.mtx.Unlock()
 
 	for _, bin := range a.bins {
-		if bin != nil && bin.Owns(ptr, a.res) {
-			bin.Free(ptr, a)
+		if bin != nil && a.binOwns(bin, ptr) {
+			a.binFree(bin, ptr)
 			return
 		}
 	}
 }
 
-func (b *Bin) Owns(ptr unsafe.Pointer, res *res.Res) bool {
+func (a *SlabAllocator) binOwns(b *Bin, ptr unsafe.Pointer) bool {
 	if ptr == nil {
 		return false
 	}
 	addr := uintptr(ptr)
 
-	if !b.available.IsEmpty() {
-		for it := b.available.Iter(); ; {
-			s, ok := it.Next()
-			if !ok {
-				break
-			}
-			if b.slabContains(s, addr) {
-				return true
-			}
+	for _, s := range b.available {
+		if a.slabContains(s, addr) {
+			return true
 		}
 	}
 
-	if !b.exhausted.IsEmpty() {
-		for it := b.exhausted.Iter(); ; {
-			s, ok := it.Next()
-			if !ok {
-				break
-			}
-			if b.slabContains(s, addr) {
-				return true
-			}
+	for _, s := range b.exhausted {
+		if a.slabContains(s, addr) {
+			return true
 		}
 	}
 
 	return false
 }
 
-func (b *Bin) slabContains(s *Slab, addr uintptr) bool {
+func (a *SlabAllocator) slabContains(s *Slab, addr uintptr) bool {
 	if s.page == nil {
 		return false
 	}
@@ -186,46 +174,42 @@ func (b *Bin) slabContains(s *Slab, addr uintptr) bool {
 	return addr >= start && addr < end
 }
 
-func (b *Bin) removeFromList(l *cont.List[*Slab], target *Slab) {
-	for node := l.Front(); node != nil; node = node.Next {
-		if node.Value == target {
-			l.Remove(node)
+func (a *SlabAllocator) removeFromSlice(s *[]*Slab, target *Slab) {
+	for i, slab := range *s {
+		if slab == target {
+			*s = append((*s)[:i], (*s)[i+1:]...)
 			return
 		}
 	}
 }
 
-func (b *Bin) Alloc(allocator *SlabAllocator) unsafe.Pointer {
+func (a *SlabAllocator) binAlloc(b *Bin) unsafe.Pointer {
 	b.mtx.Lock()
 	defer b.mtx.Unlock()
 
 	// Fast path: most recent available slab
-	if !b.available.IsEmpty() {
-		s, ok := b.available.PopBack()
-		if !ok {
-			return nil // Should not happen, but handle gracefully
-		}
-		ptr := b.allocFromSlab(s)
+	if len(b.available) > 0 {
+		s := b.available[len(b.available)-1]
+		ptr := a.allocFromSlab(s, b.size)
 		if ptr == nil {
-			b.exhausted.PushBack(s)
-		} else {
-			b.available.PushBack(s)
+			b.available = b.available[:len(b.available)-1]
+			b.exhausted = append(b.exhausted, s)
 		}
 		return ptr
 	}
 
 	// Try free page pool via allocator
-	page := allocator.AllocatePage(b.size)
+	page := a.AllocatePage(b.size)
 	if page == nil {
 		return nil
 	}
 
-	s := b.initSlab(page)
-	b.available.PushBack(s)
-	return b.allocFromSlab(s)
+	s := a.initSlab(b, page)
+	b.available = append(b.available, s)
+	return a.allocFromSlab(s, b.size)
 }
 
-func (b *Bin) initSlab(page *res.Page) *Slab {
+func (a *SlabAllocator) initSlab(b *Bin, page *res.Page) *Slab {
 	s := &Slab{
 		page:     page,
 		freed:    nil,
@@ -247,7 +231,7 @@ func (b *Bin) initSlab(page *res.Page) *Slab {
 	return s
 }
 
-func (b *Bin) allocFromSlab(s *Slab) unsafe.Pointer {
+func (a *SlabAllocator) allocFromSlab(s *Slab, size uint64) unsafe.Pointer {
 	if s.freed == nil {
 		return nil
 	}
@@ -257,11 +241,11 @@ func (b *Bin) allocFromSlab(s *Slab) unsafe.Pointer {
 	return ptr
 }
 
-func (b *Bin) Free(ptr unsafe.Pointer, allocator *SlabAllocator) {
+func (a *SlabAllocator) binFree(b *Bin, ptr unsafe.Pointer) {
 	b.mtx.Lock()
 	defer b.mtx.Unlock()
 
-	s := b.findSlab(ptr)
+	s := a.findSlab(b, ptr)
 	if s == nil {
 		return
 	}
@@ -273,45 +257,33 @@ func (b *Bin) Free(ptr unsafe.Pointer, allocator *SlabAllocator) {
 
 	if s.usable == s.capacity {
 		// Completely empty → return page to free pool
-		b.removeFromList(b.available, s)
-		b.removeFromList(b.exhausted, s)
+		a.removeFromSlice(&b.available, s)
+		a.removeFromSlice(&b.exhausted, s)
 
-		allocator.mtx.Lock()
-		allocator.freePages.PushBack(s.page)
-		allocator.mtx.Unlock()
+		a.mtx.Lock()
+		a.freePages = append(a.freePages, s.page)
+		a.mtx.Unlock()
 	} else {
 		// Promote to available list
-		b.removeFromList(b.exhausted, s)
-		b.available.PushBack(s)
+		a.removeFromSlice(&b.exhausted, s)
+		b.available = append(b.available, s)
 	}
 }
 
-func (b *Bin) findSlab(ptr unsafe.Pointer) *Slab {
+func (a *SlabAllocator) findSlab(b *Bin, ptr unsafe.Pointer) *Slab {
 	addr := uintptr(ptr)
 
 	// Check available list first
-	if !b.available.IsEmpty() {
-		for it := b.available.Iter(); ; {
-			s, ok := it.Next()
-			if !ok {
-				break
-			}
-			if b.slabContains(s, addr) {
-				return s
-			}
+	for _, s := range b.available {
+		if a.slabContains(s, addr) {
+			return s
 		}
 	}
 
 	// Check exhausted list
-	if !b.exhausted.IsEmpty() {
-		for it := b.exhausted.Iter(); ; {
-			s, ok := it.Next()
-			if !ok {
-				break
-			}
-			if b.slabContains(s, addr) {
-				return s
-			}
+	for _, s := range b.exhausted {
+		if a.slabContains(s, addr) {
+			return s
 		}
 	}
 
@@ -323,13 +295,13 @@ func (a *SlabAllocator) Reset() {
 	defer a.mtx.Unlock()
 
 	a.res.Reset()
-	a.freePages.Reset()
+	a.freePages = a.freePages[:0]
 
 	for _, bin := range a.bins {
 		if bin != nil {
 			bin.mtx.Lock()
-			bin.exhausted.Reset()
-			bin.available.Reset()
+			bin.exhausted = bin.exhausted[:0]
+			bin.available = bin.available[:0]
 			bin.mtx.Unlock()
 		}
 	}
