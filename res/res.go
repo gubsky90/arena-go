@@ -16,6 +16,7 @@ func (p *Page) Base() []byte {
 
 func NewPage(size int) *Page {
 	base := MakePages(size)
+	// fmt.Printf("[RES] NewPage: allocated %d bytes at %p\n", size, unsafe.SliceData(base))
 	return &Page{base: base, size: len(base)}
 }
 
@@ -42,20 +43,31 @@ func (r *Res) Reset() {
 }
 
 func (r *Res) Alloc(size, align uint64) unsafe.Pointer {
+	// fmt.Println("Size: ", size, "Align", align)
+	if align < 1 {
+		align = 1
+	}
 	r.mtx.Lock()
 	defer r.mtx.Unlock()
-	aligned := (r.offset + int(align-1)) &^ int(align-1)
-	if aligned+int(size) > r.chunks[r.current].size {
-		if r.current+1 >= len(r.chunks) {
-			sz := max(int(size), r.chunks[0].size)
-			r.chunks = append(r.chunks, NewPage(sz))
+	for {
+		var (
+			chunk   = r.chunks[r.current]
+			base    = unsafe.Pointer(unsafe.SliceData(chunk.base))
+			current = uintptr(base) + uintptr(r.offset)
+			aligned = (current + uintptr(align-1)) &^ uintptr(align-1)
+			end     = aligned + uintptr(size)
+		)
+		if int(end-uintptr(base)) <= chunk.size {
+			r.offset = int(end - uintptr(base))
+			ptr := unsafe.Add(base, int(aligned-uintptr(base)))
+			return ptr
 		}
-		r.current = r.current + 1
-		r.offset, aligned = 0, 0
+		if r.current+1 >= len(r.chunks) {
+			r.chunks = append(r.chunks, NewPage(max(int(size+align-1), r.chunks[0].size)))
+		}
+		r.current++
+		r.offset = 0
 	}
-	ptr := unsafe.Pointer(unsafe.SliceData(r.chunks[r.current].base[aligned:][:int(size)]))
-	r.offset = aligned + int(size)
-	return ptr
 }
 
 func (r *Res) Delete() {
@@ -100,6 +112,15 @@ func (r *Res) Size() int {
 		size = size + len(c.base)
 	}
 	return size
+}
+
+// New creates a new chunk of the given size and adds it to the resource manager
+func (r *Res) New(size int) *Page {
+	r.mtx.Lock()
+	defer r.mtx.Unlock()
+	page := NewPage(size)
+	r.chunks = append(r.chunks, page)
+	return page
 }
 
 // FindPage returns the Page that contains the given pointer and true,

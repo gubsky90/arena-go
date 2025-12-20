@@ -334,3 +334,112 @@ func TestBuddy_OversizedAllocation(t *testing.T) {
 		t.Error("second oversized allocation corrupted")
 	}
 }
+
+func TestBuddy_DetailedDebug(t *testing.T) {
+	// Allocate just enough to see the 32766-32768 issue in detail
+	a := arena.New(alloc.NewBuddyAllocator())
+	defer a.Delete()
+
+	const count = 32800
+	ptrs := make([]*uint64, count)
+
+	// Allocate up to the problem area
+	for i := 0; i < count; i++ {
+		ptrs[i] = arena.Alloc[uint64](a)
+		if ptrs[i] == nil {
+			t.Fatalf("allocation %d failed", i)
+		}
+		*ptrs[i] = uint64(i)
+
+		// Log around problem indices
+		if i >= 32762 && i <= 32772 {
+			// Check if this address already exists
+			for j := 0; j < i; j++ {
+				if ptrs[j] != nil && ptrs[j] == ptrs[i] {
+					t.Errorf("DUPLICATE DETECTED: alloc %d ptr=%p same as alloc %d", i, ptrs[i], j)
+					t.Logf("  alloc[%d] = %p, value = %d", j, ptrs[j], *ptrs[j])
+					t.Logf("  alloc[%d] = %p, value = %d", i, ptrs[i], *ptrs[i])
+					break
+				}
+			}
+			t.Logf("alloc[%d] = %p, value=%d", i, ptrs[i], *ptrs[i])
+		}
+	}
+
+	t.Logf("Completed %d allocations", count)
+}
+
+func TestBuddy_100KUint64(t *testing.T) {
+	// Allocate 100K uint64 values across multiple chunks
+	a := arena.New(alloc.NewBuddyAllocator())
+	defer a.Delete()
+
+	const count = 100_000
+	ptrs := make([]*uint64, count)
+
+	// Allocate 100K uint64
+	for i := 0; i < count; i++ {
+		ptrs[i] = arena.Alloc[uint64](a)
+		if ptrs[i] == nil {
+			t.Fatalf("allocation %d failed", i)
+		}
+		*ptrs[i] = uint64(i)
+	}
+
+	// Verify all pointers are unique
+	seen := make(map[uintptr]bool)
+	for i := 0; i < count; i++ {
+		addr := uintptr(unsafe.Pointer(ptrs[i]))
+		if seen[addr] {
+			t.Errorf("duplicate address at index %d: %#x", i, addr)
+		}
+		seen[addr] = true
+		// Verify value
+		if *ptrs[i] != uint64(i) {
+			t.Errorf("index %d: expected %d, got %d", i, i, *ptrs[i])
+		}
+	}
+
+	t.Logf("Successfully allocated and verified %d uint64 values across multiple chunks", count)
+}
+
+func TestBuddy_10KUint64(t *testing.T) {
+	// Test with 10K to isolate the issue
+	a := arena.New(alloc.NewBuddyAllocator())
+	defer a.Delete()
+
+	const count = 10_000
+	ptrs := make([]*uint64, count)
+
+	// Allocate 10K uint64
+	for i := 0; i < count; i++ {
+		ptrs[i] = arena.Alloc[uint64](a)
+		if ptrs[i] == nil {
+			t.Fatalf("allocation %d failed", i)
+		}
+		*ptrs[i] = uint64(i)
+	}
+
+	// Verify all pointers are unique
+	seen := make(map[uintptr]bool)
+	for i := 0; i < count; i++ {
+		addr := uintptr(unsafe.Pointer(ptrs[i]))
+
+		// Figure out which chunk this belongs to (simplified without Res)
+		chunkIdx := -1
+
+		if seen[addr] {
+			t.Errorf("duplicate address at index %d (chunk %d): %#x", i, chunkIdx, addr)
+		}
+		seen[addr] = true
+		// Verify value
+		if *ptrs[i] != uint64(i) {
+			t.Errorf("index %d (chunk %d): expected %d, got %d", i, chunkIdx, i, *ptrs[i])
+			if i > 32760 && i < 32770 {
+				t.Logf("DEBUG: Around error: index=%d, ptr=%p, chunkIdx=%d, value=%d", i, ptrs[i], chunkIdx, *ptrs[i])
+			}
+		}
+	}
+
+	t.Logf("Successfully allocated and verified %d uint64 values across multiple chunks", count)
+}

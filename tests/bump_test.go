@@ -2,6 +2,7 @@ package arena_test
 
 import (
 	"testing"
+	"unsafe"
 
 	"github.com/thebagchi/arena-go"
 	"github.com/thebagchi/arena-go/alloc"
@@ -151,4 +152,72 @@ func TestBumpAllocatorGrow(t *testing.T) {
 	if *anotherPtr != 999999 {
 		t.Fatalf("anotherPtr: got %d, expected 999999", *anotherPtr)
 	}
+}
+
+func TestBump_100KInt64(t *testing.T) {
+	// Allocate 100K int64 values using bump allocator
+	a := arena.New(alloc.NewBumpAllocator(100 * 4096)) // Start with 100 pages
+	defer a.Delete()
+
+	const count = 100_000
+	ptrs := make([]*int64, count)
+
+	// Allocate 100K int64
+	for i := 0; i < count; i++ {
+		ptrs[i] = arena.Alloc[int64](a)
+		if ptrs[i] == nil {
+			t.Fatalf("allocation %d failed", i)
+		}
+		*ptrs[i] = int64(i)
+	}
+
+	// Verify all pointers are unique
+	seen := make(map[uintptr]bool)
+	for i := 0; i < count; i++ {
+		addr := uintptr(unsafe.Pointer(ptrs[i]))
+		if seen[addr] {
+			t.Errorf("duplicate address at index %d: %#x", i, addr)
+		}
+		seen[addr] = true
+		// Verify value
+		if *ptrs[i] != int64(i) {
+			t.Errorf("index %d: expected %d, got %d", i, i, *ptrs[i])
+		}
+	}
+
+	t.Logf("Successfully allocated and verified %d int64 values", count)
+}
+
+func TestBump_1MInt64(t *testing.T) {
+	// Allocate 1M int64 values using bump allocator
+	a := arena.New(alloc.NewBumpAllocator(2000 * 4096)) // Start with 2000 pages (~8MB)
+	defer a.Delete()
+
+	const count = 1_000_000
+	ptrs := make([]*int64, count)
+
+	// Allocate 1M int64
+	for i := 0; i < count; i++ {
+		ptrs[i] = arena.Alloc[int64](a)
+		if ptrs[i] == nil {
+			t.Fatalf("allocation %d failed", i)
+		}
+		*ptrs[i] = int64(i)
+	}
+
+	// Verify all pointers are unique
+	seen := make(map[uintptr]bool)
+	for i := 0; i < count; i++ {
+		addr := uintptr(unsafe.Pointer(ptrs[i]))
+		if seen[addr] {
+			t.Errorf("duplicate address at index %d: %#x", i, addr)
+		}
+		seen[addr] = true
+		// Verify value
+		if *ptrs[i] != int64(i) {
+			t.Errorf("index %d: expected %d, got %d", i, i, *ptrs[i])
+		}
+	}
+
+	t.Logf("Successfully allocated and verified %d int64 values", count)
 }

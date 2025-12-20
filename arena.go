@@ -107,7 +107,8 @@ func Alloc[T any](a *Arena) *T {
 	if size == 0 {
 		size = 1
 	}
-	ptr := a.Allocator.Alloc(uint64(size), 16)
+	align := unsafe.Alignof(zero)
+	ptr := a.Allocator.Alloc(uint64(size), uint64(align))
 	return (*T)(ptr)
 }
 
