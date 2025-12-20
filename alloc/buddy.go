@@ -44,7 +44,10 @@ const (
 )
 
 var (
-	MIN_CHUNK_SIZE = (res.PAGE_SIZE * 8 * MIN_BLOCK_SIZE) + res.PAGE_SIZE
+	MIN_BITMAP_SIZE = res.PAGE_SIZE
+	MIN_DATA_SIZE   = MIN_BITMAP_SIZE * 8 * MIN_BLOCK_SIZE
+	MIN_CHUNK_SIZE  = MIN_DATA_SIZE + MIN_BITMAP_SIZE
+	USE_RES         = true // Set to true to use Res manager, false for direct make()
 )
 
 type FreeList = cont.List[unsafe.Pointer]
@@ -57,11 +60,9 @@ type Bitmap struct {
 
 // NewBitmap creates a Bitmap view over the in-place bitmap at the start of a chunk.
 func NewBitmap(chunk []byte) *Bitmap {
-	chunkSize := len(chunk)
-	numBits := (chunkSize - bitmapSize(chunkSize)) / MIN_BLOCK_SIZE
 	return &Bitmap{
-		data: chunk[:bitmapSize(chunkSize)],
-		bits: numBits,
+		data: chunk[:MIN_BITMAP_SIZE],
+		bits: MIN_DATA_SIZE / MIN_BLOCK_SIZE,
 	}
 }
 
@@ -100,16 +101,38 @@ func (b *Bitmap) Reset() {
 }
 
 type BuddyAllocator struct {
-	res   *res.Res
-	free  []*FreeList
-	order int
-	mtx   sync.Mutex
+	chunks []*chunkData // Used when USE_RES = false
+	res    *res.Res     // Used when USE_RES = true
+	free   []*FreeList
+	order  int
+	mtx    sync.Mutex
+}
+
+// chunkData wraps a byte slice
+type chunkData struct {
+	data []byte
+}
+
+func (c *chunkData) Base() []byte {
+	return c.data
 }
 
 func NewBuddyAllocator() *BuddyAllocator {
-	a := &BuddyAllocator{
-		res:  res.NewRes(MIN_CHUNK_SIZE),
-		free: make([]*FreeList, 0, 32),
+	var a *BuddyAllocator
+	if USE_RES {
+		a = &BuddyAllocator{
+			res:  res.NewRes(MIN_CHUNK_SIZE),
+			free: make([]*FreeList, 0, 32),
+		}
+		// Populate chunks with res chunks for unified access
+		a.chunks = []*chunkData{{data: a.res.Chunks()[0].Base()}}
+	} else {
+		// Use direct make() allocation - simpler, more reliable than res manager
+		initialChunkData := make([]byte, MIN_CHUNK_SIZE)
+		a = &BuddyAllocator{
+			chunks: []*chunkData{{data: initialChunkData}},
+			free:   make([]*FreeList, 0, 32),
+		}
 	}
 	a.mtx.Lock()
 	a.initializeFreeListList()
@@ -117,21 +140,14 @@ func NewBuddyAllocator() *BuddyAllocator {
 	return a
 }
 
-// bitmapSize returns bytes needed for bitmap covering the full chunk
-func bitmapSize(chunkSize int) int {
-	num := chunkSize / MIN_BLOCK_SIZE
-	return (num + 7) / 8 // round up to nearest byte
-}
-
 // blockOffset returns first usable byte after the bitmap
 func blockOffset(chunk []byte) unsafe.Pointer {
-	size := bitmapSize(len(chunk))
-	return unsafe.Add(unsafe.Pointer(unsafe.SliceData(chunk)), size)
+	return unsafe.Add(unsafe.Pointer(unsafe.SliceData(chunk)), MIN_BITMAP_SIZE)
 }
 
 // blockSize returns usable memory after bitmap
 func blockSize(chunk []byte) int {
-	return len(chunk) - bitmapSize(len(chunk))
+	return MIN_DATA_SIZE
 }
 
 // blockIndex returns the min-block index within the payload for a pointer
@@ -153,7 +169,8 @@ func (a *BuddyAllocator) initializeFreeListList() {
 	}
 	a.free = a.free[:0]
 	a.order = 0
-	for _, chunk := range a.res.Chunks() {
+
+	for _, chunk := range a.chunks {
 		usable := blockSize(chunk.Base())
 		if usable < MIN_BLOCK_SIZE {
 			continue
@@ -174,6 +191,50 @@ func (a *BuddyAllocator) initializeFreeListList() {
 	}
 }
 
+// createChunk allocates a new chunk using either make() or res manager
+func (a *BuddyAllocator) createChunk(size int) chunkData {
+	if USE_RES {
+		// Add a new chunk using res manager - this creates a raw chunk without allocation
+		page := a.res.New(size)
+		return chunkData{data: page.Base()}
+	} else {
+		// Allocate using make()
+		return chunkData{data: make([]byte, size)}
+	}
+}
+
+// addNewChunkToFreeLists adds only the most recently allocated chunk to the free lists
+// without rebuilding existing free lists (preserves allocation state)
+func (a *BuddyAllocator) addNewChunkToFreeLists() {
+	var newChunk []byte
+	if len(a.chunks) > 0 {
+		newChunk = a.chunks[len(a.chunks)-1].Base()
+	}
+
+	if len(newChunk) == 0 {
+		return
+	}
+
+	usable := blockSize(newChunk)
+	if usable < MIN_BLOCK_SIZE {
+		return
+	}
+	order := int(res.Log2(uint64(usable)))
+	if res.Pow2(uint64(order+1)) <= uint64(usable) {
+		order++
+	}
+	if order < MIN_ORDER {
+		return
+	}
+
+	payload := blockOffset(newChunk)
+	if order > a.order {
+		a.order = order
+	}
+	list := a.getFreeList(order)
+	list.PushBack(payload)
+}
+
 func (a *BuddyAllocator) Alloc(size, align uint64) unsafe.Pointer {
 	if size == 0 {
 		return nil
@@ -185,8 +246,10 @@ func (a *BuddyAllocator) Alloc(size, align uint64) unsafe.Pointer {
 	align = res.RoundPow2(align)
 	var (
 		blockSize     = max(res.RoundPow2(size), align)
-		requiredOrder = int(res.Log2(blockSize))
+		requiredOrder int
 	)
+	blockSize = max(blockSize, MIN_BLOCK_SIZE)
+	requiredOrder = int(res.Log2(blockSize))
 	a.mtx.Lock()
 	defer a.mtx.Unlock()
 	order := requiredOrder
@@ -194,8 +257,28 @@ func (a *BuddyAllocator) Alloc(size, align uint64) unsafe.Pointer {
 		list := a.getFreeList(order)
 		for node := list.Back(); node != nil; node = node.Prev {
 			blockPtr := node.Value
+			// Check if already allocated
+			for _, chunk := range a.chunks {
+				var (
+					baseAddr    = uintptr(unsafe.Pointer(unsafe.SliceData(chunk.Base())))
+					payloadAddr = uintptr(blockOffset(chunk.Base()))
+					blockAddr   = uintptr(blockPtr)
+				)
+				if blockAddr >= payloadAddr && blockAddr < baseAddr+uintptr(len(chunk.Base())) {
+					idx := blockIndex(uintptr(blockPtr), chunk.Base())
+					if idx >= 0 {
+						bitmap := NewBitmap(chunk.Base())
+						if bitmap.IsSet(idx) {
+							// Already allocated, remove this duplicate from list
+							list.Remove(node)
+							goto next
+						}
+					}
+					break
+				}
+			}
 			// Check bitmap for this block
-			for _, chunk := range a.res.Chunks() {
+			for _, chunk := range a.chunks {
 				var (
 					baseAddr    = uintptr(unsafe.Pointer(unsafe.SliceData(chunk.Base())))
 					payloadAddr = uintptr(blockOffset(chunk.Base()))
@@ -222,6 +305,7 @@ func (a *BuddyAllocator) Alloc(size, align uint64) unsafe.Pointer {
 				}
 			}
 		}
+	next:
 		order++
 	}
 
@@ -234,8 +318,9 @@ func (a *BuddyAllocator) Alloc(size, align uint64) unsafe.Pointer {
 		}
 	}
 
-	a.res.Alloc(uint64(growSize), align)
-	a.initializeFreeListList()
+	chunk := a.createChunk(growSize)
+	a.chunks = append(a.chunks, &chunk)
+	a.addNewChunkToFreeLists()
 
 	// Final attempt
 	order = requiredOrder
@@ -348,30 +433,54 @@ func (a *BuddyAllocator) Remove(ptr unsafe.Pointer) {
 func (a *BuddyAllocator) Reset() {
 	a.mtx.Lock()
 	defer a.mtx.Unlock()
-	a.res.Reset()
+	a.order = 0
+	a.free = a.free[:0]
+	if USE_RES {
+		a.res.Reset()
+	} else {
+		// Reset chunks to initial state
+		a.chunks = a.chunks[:1]
+		a.chunks[0].data = make([]byte, MIN_CHUNK_SIZE)
+	}
 	a.initializeFreeListList()
 }
 
 func (a *BuddyAllocator) Delete() {
 	a.mtx.Lock()
 	defer a.mtx.Unlock()
-	if a.res != nil {
-		a.res.Delete()
-		a.res = nil
+	if USE_RES {
+		if a.res != nil {
+			a.res.Delete()
+			a.res = nil
+		}
+	} else {
+		for _, chunk := range a.chunks {
+			res.ReleasePages(chunk.data)
+		}
 	}
+	a.chunks = nil
 	a.free = nil
 	a.order = 0
 }
 
 func (a *BuddyAllocator) Owns(ptr unsafe.Pointer) bool {
-	if ptr == nil || a.res == nil {
+	if ptr == nil {
 		return false
 	}
 
 	a.mtx.Lock()
 	defer a.mtx.Unlock()
 
-	return a.res.Owns(ptr)
+	// Check if pointer falls within any of our chunks
+	for _, chunk := range a.chunks {
+		chunkBase := uintptr(unsafe.Pointer(unsafe.SliceData(chunk.data)))
+		chunkEnd := chunkBase + uintptr(len(chunk.data))
+		ptrAddr := uintptr(ptr)
+		if ptrAddr >= chunkBase && ptrAddr < chunkEnd {
+			return true
+		}
+	}
+	return false
 }
 
 func (a *BuddyAllocator) getFreeList(order int) *FreeList {
@@ -393,7 +502,7 @@ func (a *BuddyAllocator) getFreeList(order int) *FreeList {
 }
 
 func (a *BuddyAllocator) markAllocated(blockPtr unsafe.Pointer) {
-	for _, chunk := range a.res.Chunks() {
+	for _, chunk := range a.chunks {
 		var (
 			baseAddr    = uintptr(unsafe.Pointer(unsafe.SliceData(chunk.Base())))
 			payloadAddr = uintptr(blockOffset(chunk.Base()))
