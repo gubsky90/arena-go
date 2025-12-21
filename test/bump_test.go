@@ -1302,7 +1302,7 @@ func TestBump_Vec_NativeTypes(t *testing.T) {
 	// 100K string
 	vecStringLarge := container.NewVec[string](a)
 	for i := range count {
-		vecStringLarge.AppendOne(fmt.Sprintf("item%d", i))
+		vecStringLarge.AppendOne(a.MakeString(fmt.Sprintf("item%d", i)))
 	}
 	if vecStringLarge.Len() != count {
 		t.Errorf("Vec[string] 100K length: expected %d, got %d", count, vecStringLarge.Len())
@@ -1414,6 +1414,55 @@ func BenchmarkBump_Allocations(b *testing.B) {
 		type Empty struct{}
 		arena.Alloc[Empty](a)
 
+		a.Reset()
+	}
+}
+
+func BenchmarkBump_StructAlloc(b *testing.B) {
+	a := arena.New(alloc.NewBumpAllocator(res.PAGE_SIZE))
+	defer a.Delete()
+
+	b.ReportAllocs()
+
+	type TestStruct struct {
+		f01 [100]int
+		f02 [100]int8
+		f03 [100]int16
+		f04 [100]int32
+		f05 [100]int64
+		f06 [100]uint
+		f07 [100]float32
+		f08 [100]float64
+		f09 [100]bool
+		f10 [100]string
+		f11 [100]byte
+		f12 int
+		f13 int8
+		f14 int16
+		f15 int32
+		f16 int64
+		f17 uint
+		f18 float32
+		f19 float64
+		f20 bool
+		f21 string
+		f22 byte
+	}
+
+	for b.Loop() {
+		vec := container.NewVec[*TestStruct](a)
+		const count = 100_000
+		for i := range count {
+			ptr := arena.Alloc[TestStruct](a)
+			if ptr == nil {
+				b.Fatal("Failed to allocate TestStruct")
+			}
+			ptr.f12 = i
+			vec.AppendOne(ptr)
+		}
+		if vec.Len() != count {
+			b.Fatalf("Vec length mismatch: expected %d, got %d", count, vec.Len())
+		}
 		a.Reset()
 	}
 }
