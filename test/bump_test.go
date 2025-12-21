@@ -9,6 +9,7 @@ import (
 
 	"github.com/thebagchi/arena-go"
 	"github.com/thebagchi/arena-go/alloc"
+	"github.com/thebagchi/arena-go/container"
 	"github.com/thebagchi/arena-go/res"
 )
 
@@ -752,7 +753,7 @@ func TestBump_ExpandCases(t *testing.T) {
 	a := arena.New(alloc.NewBumpAllocator(res.PAGE_SIZE))
 	defer a.Delete()
 
-	t.Run("ExpandCase1_SingleElementNoGrowth", func(t *testing.T) {
+	t.Run("EXPANDCASE1_SINGLEELEMENTNOGROWTH", func(t *testing.T) {
 		slice := arena.MakeSlice[int](a, 2, 4)
 		slice[0] = 1
 		slice[1] = 2
@@ -776,7 +777,7 @@ func TestBump_ExpandCases(t *testing.T) {
 		}
 	})
 
-	t.Run("ExpandCase2_SingleElementWithGrowth", func(t *testing.T) {
+	t.Run("EXPANDCASE2_SINGLEELEMENTWITHGROWTH", func(t *testing.T) {
 		slice := arena.MakeSlice[int](a, 2, 2)
 		slice[0] = 1
 		slice[1] = 2
@@ -800,7 +801,7 @@ func TestBump_ExpandCases(t *testing.T) {
 		}
 	})
 
-	t.Run("ExpandCase3_MultiElementNoGrowth", func(t *testing.T) {
+	t.Run("EXPANDCASE3_MULTIELEMENTNOGROWTH", func(t *testing.T) {
 		slice := arena.MakeSlice[int](a, 2, 6)
 		slice[0] = 1
 		slice[1] = 2
@@ -827,7 +828,7 @@ func TestBump_ExpandCases(t *testing.T) {
 		}
 	})
 
-	t.Run("ExpandCase4_MultiElementWithGrowth", func(t *testing.T) {
+	t.Run("EXPANDCASE4_MULTIELEMENTWITHGROWTH", func(t *testing.T) {
 		slice := arena.MakeSlice[int](a, 2, 3)
 		slice[0] = 1
 		slice[1] = 2
@@ -854,7 +855,7 @@ func TestBump_ExpandCases(t *testing.T) {
 		}
 	})
 
-	t.Run("ExpandCase5_AppendToEmptySlice", func(t *testing.T) {
+	t.Run("EXPANDCASE5_APPENDTOEMPTYSLICE", func(t *testing.T) {
 		slice := arena.MakeSlice[int](a, 0, 2)
 
 		slice = arena.Append(a, slice, 10)
@@ -1036,6 +1037,305 @@ func TestBump_ConcurrentAllocations(t *testing.T) {
 	}
 
 	t.Logf("Concurrent allocations completed successfully: %d goroutines, %d allocations each", numGoroutines, allocationsPerGoroutine)
+}
+
+func TestBump_InvalidInputs(t *testing.T) {
+	a := arena.New(alloc.NewBumpAllocator(res.PAGE_SIZE))
+	defer a.Delete()
+
+	t.Run("MAKESLICE_NEGATIVELEN", func(t *testing.T) {
+		// Note: Library may allow negative len, check behavior
+		slice := arena.MakeSlice[int](a, -1, 0)
+		if len(slice) != 0 || cap(slice) != 0 {
+			t.Errorf("Unexpected slice for negative len: len=%d, cap=%d", len(slice), cap(slice))
+		}
+	})
+
+	t.Run("MAKESLICE_NEGATIVECAP", func(t *testing.T) {
+		defer func() {
+			if r := recover(); r == nil {
+				t.Error("Expected panic for negative capacity in MakeSlice")
+			}
+		}()
+		arena.MakeSlice[int](a, 0, -1)
+	})
+
+	t.Run("MAKESLICE_LENGREATERTHANCAP", func(t *testing.T) {
+		defer func() {
+			if r := recover(); r == nil {
+				t.Error("Expected panic for len > cap in MakeSlice")
+			}
+		}()
+		arena.MakeSlice[int](a, 5, 3)
+	})
+
+	t.Run("MAKESTRING_EMPTY", func(t *testing.T) {
+		s := a.MakeString("")
+		if s != "" {
+			t.Errorf("Expected empty string, got %q", s)
+		}
+	})
+
+	t.Run("ALLOC_ZEROSIZE", func(t *testing.T) {
+		ptr := arena.Alloc[struct{}](a)
+		if ptr == nil {
+			t.Error("Failed to allocate zero-sized struct")
+		}
+	})
+
+	t.Run("RESET_AFTERDELETE", func(t *testing.T) {
+		a2 := arena.New(alloc.NewBumpAllocator(res.PAGE_SIZE))
+		a2.Delete()
+		// Reset after delete may be safe, check if it doesn't crash
+		a2.Reset() // If it panics, the test will fail
+	})
+
+	t.Run("ALLOC_AFTERDELETE", func(t *testing.T) {
+		a3 := arena.New(alloc.NewBumpAllocator(res.PAGE_SIZE))
+		a3.Delete()
+		defer func() {
+			if r := recover(); r == nil {
+				t.Error("Expected panic when allocating after delete")
+			}
+		}()
+		arena.Alloc[int](a3)
+	})
+
+	t.Logf("Invalid input tests completed")
+}
+
+func FuzzBumpAlloc(f *testing.F) {
+	// Seed with some initial values
+	f.Add(10, 20)   // len, cap for slice
+	f.Add(0, 0)     // empty slice
+	f.Add(100, 200) // larger slice
+	f.Add(1, 1)     // minimal
+
+	f.Fuzz(func(t *testing.T, sliceLen, sliceCap int) {
+		// Skip invalid inputs to avoid expected panics
+		if sliceLen < 0 || sliceCap < 0 || sliceLen > sliceCap {
+			return
+		}
+
+		a := arena.New(alloc.NewBumpAllocator(res.PAGE_SIZE))
+		defer a.Delete()
+
+		// Allocate a slice with fuzzed len/cap
+		slice := arena.MakeSlice[int](a, sliceLen, sliceCap)
+		if len(slice) != sliceLen {
+			t.Errorf("Slice len mismatch: got %d, expected %d", len(slice), sliceLen)
+		}
+		if cap(slice) < sliceCap {
+			t.Errorf("Slice cap too small: got %d, expected >= %d", cap(slice), sliceCap)
+		}
+
+		// Fill the slice to test allocation
+		for i := range slice {
+			slice[i] = i
+		}
+
+		// Allocate some primitives
+		intPtr := arena.Alloc[int](a)
+		if intPtr == nil {
+			t.Error("Failed to allocate int")
+		} else {
+			*intPtr = 42
+		}
+
+		floatPtr := arena.Alloc[float64](a)
+		if floatPtr == nil {
+			t.Error("Failed to allocate float64")
+		} else {
+			*floatPtr = 3.14
+		}
+
+		boolPtr := arena.Alloc[bool](a)
+		if boolPtr == nil {
+			t.Error("Failed to allocate bool")
+		} else {
+			*boolPtr = true
+		}
+
+		// Allocate a string
+		str := a.MakeString("fuzz test string")
+		if str != "fuzz test string" {
+			t.Errorf("String allocation failed: got %q", str)
+		}
+
+		// Allocate an array
+		arrayPtr := arena.Alloc[[5]int](a)
+		if arrayPtr == nil {
+			t.Error("Failed to allocate array")
+		} else {
+			for i := range *arrayPtr {
+				(*arrayPtr)[i] = i * 2
+			}
+		}
+
+		// Allocate the complex struct from benchmark
+		type TestStruct struct {
+			f01 [5]int
+			f02 [5]int8
+			f03 [5]int16
+			f04 [5]int32
+			f05 [5]int64
+			f06 [5]uint
+			f07 [5]float32
+			f08 [5]float64
+			f09 [5]bool
+			f10 [5]string
+			f11 [5]byte
+			f12 int
+			f13 int8
+			f14 int16
+			f15 int32
+			f16 int64
+			f17 uint
+			f18 float32
+			f19 float64
+			f20 bool
+			f21 string
+			f22 byte
+		}
+		structPtr := arena.Alloc[TestStruct](a)
+		if structPtr == nil {
+			t.Error("Failed to allocate complex struct")
+		} else {
+			// Initialize some fields to test
+			structPtr.f12 = 123
+			structPtr.f21 = "fuzz"
+		}
+
+		// Reset to ensure cleanup
+		a.Reset()
+	})
+}
+
+func TestBump_Vec_NativeTypes(t *testing.T) {
+	a := arena.New(alloc.NewBumpAllocator(res.PAGE_SIZE))
+	defer a.Delete()
+
+	// Test Vec with int
+	vecInt := container.NewVec[int](a)
+	vecInt.AppendOne(1)
+	vecInt.AppendOne(2)
+	vecInt.AppendOne(3)
+	if vecInt.Len() != 3 {
+		t.Errorf("Vec[int] length: expected 3, got %d", vecInt.Len())
+	}
+	if vecInt.Slice()[0] != 1 || vecInt.Slice()[1] != 2 || vecInt.Slice()[2] != 3 {
+		t.Errorf("Vec[int] values incorrect: %v", vecInt.Slice())
+	}
+
+	// Test Vec with float64
+	vecFloat := container.NewVec[float64](a)
+	vecFloat.Append(1.1, 2.2, 3.3)
+	if vecFloat.Len() != 3 {
+		t.Errorf("Vec[float64] length: expected 3, got %d", vecFloat.Len())
+	}
+	expectedFloat := []float64{1.1, 2.2, 3.3}
+	for i, v := range vecFloat.Slice() {
+		if v != expectedFloat[i] {
+			t.Errorf("Vec[float64] index %d: expected %f, got %f", i, expectedFloat[i], v)
+		}
+	}
+
+	// Test Vec with string
+	vecString := container.NewVec[string](a)
+	vecString.AppendSlice([]string{"hello", "world"})
+	if vecString.Len() != 2 {
+		t.Errorf("Vec[string] length: expected 2, got %d", vecString.Len())
+	}
+	if vecString.Slice()[0] != "hello" || vecString.Slice()[1] != "world" {
+		t.Errorf("Vec[string] values incorrect: %v", vecString.Slice())
+	}
+
+	// Test Vec with bool
+	vecBool := container.NewVec[bool](a)
+	vecBool.Push(true)
+	vecBool.Push(false)
+	if vecBool.Len() != 2 {
+		t.Errorf("Vec[bool] length: expected 2, got %d", vecBool.Len())
+	}
+	if vecBool.Slice()[0] != true || vecBool.Slice()[1] != false {
+		t.Errorf("Vec[bool] values incorrect: %v", vecBool.Slice())
+	}
+
+	// Test Vec with byte
+	vecByte := container.NewVec[byte](a)
+	vecByte.AppendOne('A')
+	vecByte.AppendOne('B')
+	if vecByte.Len() != 2 {
+		t.Errorf("Vec[byte] length: expected 2, got %d", vecByte.Len())
+	}
+	if vecByte.Slice()[0] != 'A' || vecByte.Slice()[1] != 'B' {
+		t.Errorf("Vec[byte] values incorrect: %v", vecByte.Slice())
+	}
+
+	// Test Vec with 100K items for each type
+	const count = 100_000
+
+	// 100K int
+	vecIntLarge := container.NewVec[int](a)
+	for i := range count {
+		vecIntLarge.AppendOne(i)
+	}
+	if vecIntLarge.Len() != count {
+		t.Errorf("Vec[int] 100K length: expected %d, got %d", count, vecIntLarge.Len())
+	}
+	if vecIntLarge.Slice()[0] != 0 || vecIntLarge.Slice()[count-1] != count-1 {
+		t.Errorf("Vec[int] 100K first/last incorrect: first=%d, last=%d", vecIntLarge.Slice()[0], vecIntLarge.Slice()[count-1])
+	}
+
+	// 100K float64
+	vecFloatLarge := container.NewVec[float64](a)
+	for i := range count {
+		vecFloatLarge.AppendOne(float64(i) + 0.5)
+	}
+	if vecFloatLarge.Len() != count {
+		t.Errorf("Vec[float64] 100K length: expected %d, got %d", count, vecFloatLarge.Len())
+	}
+	if vecFloatLarge.Slice()[0] != 0.5 || vecFloatLarge.Slice()[count-1] != float64(count-1)+0.5 {
+		t.Errorf("Vec[float64] 100K first/last incorrect: first=%f, last=%f", vecFloatLarge.Slice()[0], vecFloatLarge.Slice()[count-1])
+	}
+
+	// 100K string
+	vecStringLarge := container.NewVec[string](a)
+	for i := range count {
+		vecStringLarge.AppendOne(fmt.Sprintf("item%d", i))
+	}
+	if vecStringLarge.Len() != count {
+		t.Errorf("Vec[string] 100K length: expected %d, got %d", count, vecStringLarge.Len())
+	}
+	if vecStringLarge.Slice()[0] != "item0" || vecStringLarge.Slice()[count-1] != fmt.Sprintf("item%d", count-1) {
+		t.Errorf("Vec[string] 100K first/last incorrect: first=%s, last=%s", vecStringLarge.Slice()[0], vecStringLarge.Slice()[count-1])
+	}
+
+	// 100K bool
+	vecBoolLarge := container.NewVec[bool](a)
+	for i := range count {
+		vecBoolLarge.AppendOne(i%2 == 0)
+	}
+	if vecBoolLarge.Len() != count {
+		t.Errorf("Vec[bool] 100K length: expected %d, got %d", count, vecBoolLarge.Len())
+	}
+	if vecBoolLarge.Slice()[0] != true || vecBoolLarge.Slice()[count-1] != ((count-1)%2 == 0) {
+		t.Errorf("Vec[bool] 100K first/last incorrect: first=%t, last=%t", vecBoolLarge.Slice()[0], vecBoolLarge.Slice()[count-1])
+	}
+
+	// 100K byte
+	vecByteLarge := container.NewVec[byte](a)
+	for i := range count {
+		vecByteLarge.AppendOne(byte(i % 256))
+	}
+	if vecByteLarge.Len() != count {
+		t.Errorf("Vec[byte] 100K length: expected %d, got %d", count, vecByteLarge.Len())
+	}
+	if vecByteLarge.Slice()[0] != 0 || vecByteLarge.Slice()[count-1] != byte((count-1)%256) {
+		t.Errorf("Vec[byte] 100K first/last incorrect: first=%d, last=%d", vecByteLarge.Slice()[0], vecByteLarge.Slice()[count-1])
+	}
+
+	t.Logf("Vec tests with native types completed successfully")
 }
 
 func BenchmarkBump_Allocations(b *testing.B) {
