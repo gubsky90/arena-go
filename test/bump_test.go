@@ -917,7 +917,7 @@ func TestBump_StressTest(t *testing.T) {
 
 	allocators := []func(){allocInt32, allocInt64, allocFloat64, allocSlice}
 
-	for i := 0; i < totalIterations; i++ {
+	for i := range totalIterations {
 		// Randomly select an allocator
 		idx := rand.Intn(len(allocators))
 		allocators[idx]()
