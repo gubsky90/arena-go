@@ -63,7 +63,8 @@ func (r *Res) Alloc(size, align uint64) unsafe.Pointer {
 			return ptr
 		}
 		if r.current+1 >= len(r.chunks) {
-			r.chunks = append(r.chunks, NewPage(max(int(size+align-1), r.chunks[0].size)))
+			page := NewPage(max(int(size+align-1), r.chunks[0].size))
+			r.chunks = append(r.chunks, page)
 		}
 		r.current++
 		r.offset = 0
