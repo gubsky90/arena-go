@@ -5,8 +5,6 @@ package res
 
 import (
 	"syscall"
-
-	"golang.org/x/sys/unix"
 )
 
 var PAGE_SIZE int
@@ -51,68 +49,4 @@ func MakePages(size int) []byte {
 // should not be used. Attempting to access it may cause undefined behavior.
 func ReleasePages(data []byte) {
 	syscall.Munmap(data)
-}
-
-// GrowPages expands an existing memory allocation to a larger size.
-// It allocates new pages for the additional memory needed and may move the
-// allocation to a different address if in-place expansion is not possible.
-//
-// Parameters:
-//   - data: The byte slice returned by MakePages. Must be the exact slice
-//     returned by MakePages, not a subslice.
-//   - newSize: The desired new size in bytes. Will be rounded up to page size.
-//
-// Returns:
-//   - []byte: A new byte slice backed by the expanded memory. The address may
-//     differ from the original allocation.
-//
-// Panics:
-//   - If mmap fails to allocate the new memory or if unmapping the old allocation fails.
-//
-// Note: The original data slice becomes invalid after calling GrowPages.
-// The caller must update all references to use the returned slice. The old
-// memory is automatically released and should not be freed manually.
-func GrowPages(data []byte, size int) []byte {
-	size = ((size + PAGE_SIZE - 1) / PAGE_SIZE) * PAGE_SIZE
-	if size <= len(data) {
-		return data
-	}
-	temp := MakePages(size)
-	copy(temp, data)
-	ReleasePages(data)
-	return temp
-}
-
-// ExpandPages expands an existing memory allocation while attempting to preserve
-// the base address using mremap (Linux only). This function tries to expand the
-// allocation in-place; if that fails, it falls back to the copy-based approach.
-//
-// Parameters:
-//   - data: The byte slice returned by MakePages. Must be the exact slice
-//     returned by MakePages, not a subslice.
-//   - newSize: The desired new size in bytes. Will be rounded up to page size.
-//
-// Returns:
-//   - []byte: A new byte slice backed by the expanded memory. The base address
-//     may remain the same if in-place expansion succeeded, or differ if fallback
-//     to copy-based expansion occurred.
-//
-// Panics:
-//   - If mmap/mremap fails to allocate the new memory or if unmapping fails.
-//
-// Note: The original data slice becomes invalid after calling ExpandPages.
-// The caller must update all references to use the returned slice. If in-place
-// expansion fails, the old memory is automatically released.
-// This function is Linux-specific; on other systems, behavior depends on mremap
-// availability or falls back to copy-based expansion.
-func ExpandPages(data []byte, size int) []byte {
-	size = ((size + PAGE_SIZE - 1) / PAGE_SIZE) * PAGE_SIZE
-	if size <= len(data) {
-		return data
-	}
-	temp, err := unix.Mremap(data, size, unix.MREMAP_MAYMOVE)
-	if err == nil {
-		return temp
-	}
-	return nil
 }

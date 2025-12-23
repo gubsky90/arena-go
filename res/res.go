@@ -14,6 +14,13 @@ func (p *Page) Base() []byte {
 	return p.base
 }
 
+func (p *Page) Delete() {
+	if p.base != nil {
+		ReleasePages(p.base)
+		p.base = nil
+		p.size = 0
+	}
+}
 func NewPage(size int) *Page {
 	base := MakePages(size)
 	// fmt.Printf("[RES] NewPage: allocated %d bytes at %p\n", size, unsafe.SliceData(base))
@@ -75,7 +82,7 @@ func (r *Res) Delete() {
 	r.mtx.Lock()
 	defer r.mtx.Unlock()
 	for _, p := range r.chunks {
-		ReleasePages(p.base)
+		p.Delete()
 	}
 	r.chunks = nil
 	r.current, r.offset = 0, 0

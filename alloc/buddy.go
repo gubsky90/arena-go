@@ -39,6 +39,7 @@ Advantages:
 const (
 	MIN_ORDER      = 4 // 16-byte minimum block
 	MIN_BLOCK_SIZE = 1 << MIN_ORDER
+	MAX_LEVEL      = 32 // Max power-of-2 levels for free lists (2^4 to 2^35)
 )
 
 var (
@@ -68,38 +69,49 @@ func (c *Chunk) PayloadOffset() int {
 	return c.bitsSize
 }
 
-// SetBit sets a bit in the bitset at given position
+// SetBit sets a bit in the bitset at given position using uint64 operations
 func (c *Chunk) SetBit(idx int) {
 	var (
-		byteIdx = idx / 8
-		bitIdx  = uint(idx % 8)
+		qwordIdx    = idx / 64
+		bitIdx      = uint(idx % 64)
+		qwordOffset = qwordIdx * 8
 	)
-	if byteIdx < c.bitsSize {
-		c.data[byteIdx] |= (1 << bitIdx)
+	if qwordOffset+8 <= c.bitsSize {
+		// Read uint64, set bit, write back
+		ptr := unsafe.Pointer(unsafe.SliceData(c.data[qwordOffset:]))
+		val := (*uint64)(ptr)
+		*val |= (1 << bitIdx)
 	}
 }
 
-// ClearBit clears a bit in the bitset at given position
+// ClearBit clears a bit in the bitset at given position using uint64 operations
 func (c *Chunk) ClearBit(idx int) {
 	var (
-		byteIdx = idx / 8
-		bitIdx  = uint(idx % 8)
+		qwordIdx    = idx / 64
+		bitIdx      = uint(idx % 64)
+		qwordOffset = qwordIdx * 8
 	)
-	if byteIdx < c.bitsSize {
-		c.data[byteIdx] &= ^(1 << bitIdx)
+	if qwordOffset+8 <= c.bitsSize {
+		// Read uint64, clear bit, write back
+		ptr := unsafe.Pointer(unsafe.SliceData(c.data[qwordOffset:]))
+		val := (*uint64)(ptr)
+		*val &= ^(1 << bitIdx)
 	}
 }
 
-// GetBit gets a bit from the bitset at given position
+// GetBit gets a bit from the bitset at given position using uint64 operations
 func (c *Chunk) GetBit(idx int) bool {
 	var (
-		byteIdx = idx / 8
-		bitIdx  = uint(idx % 8)
+		qwordIdx    = idx / 64
+		bitIdx      = uint(idx % 64)
+		qwordOffset = qwordIdx * 8
 	)
-	if byteIdx >= c.bitsSize {
+	if qwordOffset+8 > c.bitsSize {
 		return false
 	}
-	return (c.data[byteIdx] & (1 << bitIdx)) != 0
+	ptr := unsafe.Pointer(unsafe.SliceData(c.data[qwordOffset:]))
+	val := (*uint64)(ptr)
+	return (*val & (1 << bitIdx)) != 0
 }
 
 // Owns checks if a pointer falls within this chunk's address bounds
@@ -176,38 +188,50 @@ func (c *Chunk) Allocate(size int) unsafe.Pointer {
 	return unsafe.Add(unsafe.Pointer(unsafe.SliceData(c.data)), c.PayloadOffset()+c.OffsetForIndex(idx))
 }
 
-// FindFreeNode recursively searches the tree for a node that can fit the requested size
-func (c *Chunk) FindFreeNode(idx int, size int) int {
+// FindFreeNode iteratively searches the tree for a node that can fit the requested size
+// Uses a stack-based approach instead of recursion for better cache locality
+func (c *Chunk) FindFreeNode(startIdx int, size int) int {
 	maxIdx := 1 << uint(c.order+1)
-	if idx < 0 || idx >= maxIdx {
-		return -1
-	}
+	leafStart := 1 << uint(c.order)
 
-	// Check if this node is free
-	if !c.GetBit(idx) {
-		return -1 // Node is fully allocated
-	}
+	// Use a stack for iterative depth-first traversal
+	// Pre-allocate with reasonable capacity (tree depth is typically ~20-30)
+	stack := make([]int, 0, 64)
+	stack = append(stack, startIdx)
 
-	// If this is a leaf node and it's free, use it
-	if idx >= (1 << uint(c.order)) {
-		return idx
-	}
+	for len(stack) > 0 {
+		// Pop from stack
+		idx := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
 
-	// For internal nodes, try left child first (prefer contiguous allocation)
-	var (
-		left  = (2 * idx) + 0
-		right = (2 * idx) + 1
-	)
-
-	if left < maxIdx && c.GetBit(left) {
-		result := c.FindFreeNode(left, size)
-		if result >= 0 {
-			return result
+		// Check bounds
+		if idx < 0 || idx >= maxIdx {
+			continue
 		}
-	}
 
-	if right < maxIdx && c.GetBit(right) {
-		return c.FindFreeNode(right, size)
+		// Check if node is free
+		if !c.GetBit(idx) {
+			continue
+		}
+
+		// If this is a leaf and it's free, return it
+		if idx >= leafStart {
+			return idx
+		}
+
+		// For internal nodes, push children to stack (right first, then left)
+		// This way left gets popped first (LIFO stack preference)
+		right := (2 * idx) + 1
+		left := (2 * idx) + 0
+
+		// Push in reverse order: right then left
+		// So left is processed first when popped
+		if right < maxIdx && c.GetBit(right) {
+			stack = append(stack, right)
+		}
+		if left < maxIdx && c.GetBit(left) {
+			stack = append(stack, left)
+		}
 	}
 
 	return -1
@@ -277,6 +301,7 @@ func (a *BuddyAllocator) Alloc(size, align uint64) unsafe.Pointer {
 	align = res.RoundPow2(align)
 	blockSize := max(res.RoundPow2(size), align)
 	blockSize = max(blockSize, MIN_BLOCK_SIZE)
+
 	a.mtx.Lock()
 	defer a.mtx.Unlock()
 	if a.lastChunkIdx >= 0 && a.lastChunkIdx < len(a.chunks) {
@@ -287,29 +312,15 @@ func (a *BuddyAllocator) Alloc(size, align uint64) unsafe.Pointer {
 			}
 		}
 	}
-	type chunkEntry struct {
-		idx      int
-		freeSize int
-	}
-	entries := make([]chunkEntry, 0, len(a.chunks))
+
 	for i, chunk := range a.chunks {
 		if (1 << uint(chunk.order)) >= int(size) {
-			if freeSize := chunk.GetMaxFreeSize(); freeSize > 0 {
-				entries = append(entries, chunkEntry{i, freeSize})
+			if chunk.GetMaxFreeSize() > 0 {
+				if blockPtr := chunk.Allocate(int(size)); blockPtr != nil {
+					a.lastChunkIdx = i
+					return blockPtr
+				}
 			}
-		}
-	}
-	for i := 0; i < len(entries)-1; i++ {
-		for j := i + 1; j < len(entries); j++ {
-			if entries[j].freeSize > entries[i].freeSize {
-				entries[i], entries[j] = entries[j], entries[i]
-			}
-		}
-	}
-	for _, entry := range entries {
-		if blockPtr := a.chunks[entry.idx].Allocate(int(size)); blockPtr != nil {
-			a.lastChunkIdx = entry.idx
-			return blockPtr
 		}
 	}
 	growSize := max(max(int(res.RoundPow2(size*2)), int(blockSize)), MIN_CHUNK_SIZE)
@@ -401,18 +412,21 @@ func NewChunk(r *res.Res, size int) *Chunk {
 		data = make([]byte, size)
 	}
 
-	numLeaves := size / MIN_BLOCK_SIZE
+	var (
+		numLeaves = size / MIN_BLOCK_SIZE
+		order     = 0
+	)
 
 	// Calculate tree depth (order) for the number of leaves
-	order := 0
 	for (1 << uint(order)) < numLeaves {
 		order++
 	}
 
 	// Total nodes in tree: 2^(order+1) - 1
-	totalNodes := (1 << uint(order+1)) - 1
-	// Bitset size in bytes (1 bit per node, rounded up to byte boundary)
-	bitsSize := (totalNodes + 7) / 8
+	var (
+		totalNodes = (1 << uint(order+1)) - 1
+		bitsSize   = (totalNodes + 7) / 8
+	)
 
 	// Adjust size to align bitset to reasonable boundary
 	if bitsSize%8 != 0 {
@@ -445,20 +459,26 @@ func NewChunk(r *res.Res, size int) *Chunk {
 	blockSize := size - bitsSize
 	leafStart := 1 << uint(order)
 	for i := leafStart; i < (1 << uint(order+1)); i++ {
-		byteIdx := i / 8
-		bitIdx := uint(i % 8)
+		var (
+			byteIdx = i / 8
+			bitIdx  = uint(i % 8)
+		)
 		if byteIdx < bitsSize {
 			data[byteIdx] |= (1 << bitIdx)
 		}
 	}
 	for i := (leafStart - 1); i >= 1; i-- {
-		left := 2 * i
-		right := 2*i + 1
-		leftBit := left < (1<<uint(order+1)) && (left/8 < bitsSize) && (data[left/8]&(1<<uint(left%8))) != 0
-		rightBit := right < (1<<uint(order+1)) && (right/8 < bitsSize) && (data[right/8]&(1<<uint(right%8))) != 0
+		var (
+			left     = 2 * i
+			right    = 2*i + 1
+			leftBit  = left < (1<<uint(order+1)) && (left/8 < bitsSize) && (data[left/8]&(1<<uint(left%8))) != 0
+			rightBit = right < (1<<uint(order+1)) && (right/8 < bitsSize) && (data[right/8]&(1<<uint(right%8))) != 0
+		)
 		if leftBit && rightBit {
-			byteIdx := i / 8
-			bitIdx := uint(i % 8)
+			var (
+				byteIdx = i / 8
+				bitIdx  = uint(i % 8)
+			)
 			if byteIdx < bitsSize {
 				data[byteIdx] |= (1 << bitIdx)
 			}
