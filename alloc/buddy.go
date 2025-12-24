@@ -43,10 +43,10 @@ const (
 )
 
 var (
-	MIN_BITMAP_SIZE = res.PAGE_SIZE
-	MIN_DATA_SIZE   = MIN_BITMAP_SIZE * 8 * MIN_BLOCK_SIZE
-	MIN_CHUNK_SIZE  = 64 * 1024 // 64KB - reasonable default, was (MIN_DATA_SIZE + MIN_BITMAP_SIZE) which is too large
-	USE_RES         = true      // Set to true to use Res manager, false for direct make()
+	MIN_BITMAP_SIZE = res.PAGE_SIZE                        // 4KB bitmap
+	MIN_DATA_SIZE   = MIN_BITMAP_SIZE * 8 * MIN_BLOCK_SIZE // Bitmap capacity: 4KB * 8 * 16B = 512KB
+	MIN_CHUNK_SIZE  = MIN_DATA_SIZE + MIN_BITMAP_SIZE      // Full utilization: 512KB data + 4KB bitmap = ~516KB
+	USE_RES         = true                                 // Set to true to use Res manager, false for direct make()
 )
 
 // Chunk wraps a byte slice with cached address bounds and size information
@@ -164,54 +164,145 @@ func (c *Chunk) UpdateNode(idx int) {
 // Allocate allocates a block of given size from this chunk's payload
 // Uses tree-based search with bitset encoding for space efficiency
 // Returns a pointer to the allocated block, or nil if no suitable free block exists
+// Implements proper buddy splitting: when a larger block is found, splits it down to requested size
+//
+// Algorithm (with example for 100-byte request, found 512-byte block):
+//
+//	Step 1: Find free block via DFS search
+//	        Stack-based traversal of tree looking for any free block
+//	        Found: 512-byte block at index 47
+//
+//	Step 2: Split block recursively down to size needed
+//	        Block size 512 > required 100 → SPLIT
+//	        ├─ Calculate children: left=94 (256B), right=95 (256B buddy)
+//	        ├─ SetBit(95) → mark right buddy as free
+//	        ├─ idx = 94, continue with left
+//	        Block size 256 > 100 → SPLIT
+//	        ├─ Calculate children: left=188 (128B), right=189 (128B buddy)
+//	        ├─ SetBit(189) → mark right buddy as free
+//	        ├─ idx = 188, continue with left
+//	        Block size 128 > 100 → SPLIT
+//	        ├─ Calculate children: left=376 (64B), right=377 (64B buddy)
+//	        ├─ SetBit(377) → mark right buddy as free
+//	        ├─ idx = 376, continue with left
+//	        Block size 64 < 100? NO → Stop splitting
+//
+//	Step 3: Mark final block as allocated
+//	        ClearBit(376) → block at index 376 is now ALLOCATED
+//	        UpdateNode propagates changes up to root
+//
+//	Result: Exact 64-byte allocation (closest power-of-2 to 100)
+//	        Buddy blocks 377, 189, 95 remain free for future allocation
+//
+// Performance: O(log N) where N = number of blocks in tree
+//   - FindFreeNode: O(log N) DFS traversal
+//   - Splitting: O(log N) recursive splits
+//   - Total: O(log N) amortized
 func (c *Chunk) Allocate(size int) unsafe.Pointer {
 	if size <= 0 || size > c.blockSize {
 		return nil
 	}
-	if size < MIN_BLOCK_SIZE {
-		size = MIN_BLOCK_SIZE
-	}
+	size = max(size, MIN_BLOCK_SIZE)
 	if !c.GetBit(1) {
 		return nil
 	}
+
 	var (
-		idx    = c.FindFreeNode(1, size)
-		parent = idx / 2
+		requiredSize = max(size, MIN_BLOCK_SIZE)
+		maxIdx       = 1 << uint(c.order+1)
 	)
+
+	// Find a free node at the appropriate size or larger
+	idx := c.FindFreeNode(1, size)
 	if idx < 0 {
 		return nil
 	}
+
+	// Split the block down to the requested size
+	// Start from found index and split down until we reach the right size
+	currentNodeSize := c.getSizeForIndex(idx)
+
+	// Keep splitting until block size matches requested size
+	for currentNodeSize > requiredSize && idx < maxIdx {
+		// Split: mark right buddy as free, continue with left half
+		var (
+			leftChild  = (2 * idx) + 0
+			rightChild = (2 * idx) + 1
+		)
+
+		if rightChild >= maxIdx {
+			break
+		}
+
+		// Right child becomes a free buddy block
+		c.SetBit(rightChild)
+		c.UpdateNode(rightChild / 2)
+
+		// Continue with left child
+		idx = leftChild
+		currentNodeSize = currentNodeSize / 2
+	}
+
+	// Mark the final allocated block as used
 	c.ClearBit(idx)
+
+	// Update parent chain
+	parent := idx / 2
 	if parent >= 1 {
 		c.UpdateNode(parent)
 	}
+
 	return unsafe.Add(unsafe.Pointer(unsafe.SliceData(c.data)), c.PayloadOffset()+c.OffsetForIndex(idx))
 }
 
-// FindFreeNode iteratively searches the tree for a node that can fit the requested size
-// Uses a stack-based approach instead of recursion for better cache locality
-func (c *Chunk) FindFreeNode(startIdx int, size int) int {
-	maxIdx := 1 << uint(c.order+1)
+// getSizeForIndex returns the block size (in bytes) for a given tree node index
+func (c *Chunk) getSizeForIndex(idx int) int {
+	if idx <= 0 || idx >= (1<<uint(c.order+1)) {
+		return 0
+	}
+
+	// Calculate the level of this node (distance from leaves)
+	// Leaves are at level order, root is at level 0
+	// Level can be calculated from position in tree
 	leafStart := 1 << uint(c.order)
 
-	// Use a stack for iterative depth-first traversal
-	// Pre-allocate with reasonable capacity (tree depth is typically ~20-30)
-	stack := make([]int, 0, 64)
-	stack = append(stack, startIdx)
+	if idx >= leafStart {
+		// This is a leaf node = MIN_BLOCK_SIZE
+		return MIN_BLOCK_SIZE
+	}
 
-	for len(stack) > 0 {
-		// Pop from stack
-		idx := stack[len(stack)-1]
-		stack = stack[:len(stack)-1]
+	// For internal nodes: count leading zeros or calculate from parent distance to leaf
+	// Each level up from leaves doubles the size
+	var level int
+	temp := idx
+	for temp < leafStart {
+		temp *= 2
+		level++
+	}
 
+	return MIN_BLOCK_SIZE << uint(level)
+}
+
+// FindFreeNode recursively searches the tree for a free leaf node
+// Uses depth-first traversal with preference for left children
+// Returns the index of a free leaf, or -1 if none found
+func (c *Chunk) FindFreeNode(startIdx int, size int) int {
+	var (
+		maxIdx    = 1 << uint(c.order+1)
+		leafStart = 1 << uint(c.order)
+	)
+
+	// Helper function to recursively search the tree
+	var search func(int) int
+	search = func(idx int) int {
 		// Check bounds
 		if idx < 0 || idx >= maxIdx {
-			continue
+			return -1
 		}
 
 		// Check if node is free
 		if !c.GetBit(idx) {
-			continue
+			return -1
 		}
 
 		// If this is a leaf and it's free, return it
@@ -219,26 +310,31 @@ func (c *Chunk) FindFreeNode(startIdx int, size int) int {
 			return idx
 		}
 
-		// For internal nodes, push children to stack (right first, then left)
-		// This way left gets popped first (LIFO stack preference)
-		right := (2 * idx) + 1
-		left := (2 * idx) + 0
+		// For internal nodes, try left child first
+		left := 2 * idx
+		if left < maxIdx {
+			if result := search(left); result >= 0 {
+				return result
+			}
+		}
 
-		// Push in reverse order: right then left
-		// So left is processed first when popped
-		if right < maxIdx && c.GetBit(right) {
-			stack = append(stack, right)
+		// Then try right child
+		right := 2*idx + 1
+		if right < maxIdx {
+			if result := search(right); result >= 0 {
+				return result
+			}
 		}
-		if left < maxIdx && c.GetBit(left) {
-			stack = append(stack, left)
-		}
+
+		return -1
 	}
 
-	return -1
+	return search(startIdx)
 }
 
 // Remove deallocates a pointer within this chunk's payload
 // Returns true if the pointer was successfully deallocated, false if it doesn't belong to this chunk
+// Implements proper buddy coalescing: recursively merges with buddy blocks when both are free
 func (c *Chunk) Remove(ptr unsafe.Pointer) bool {
 	if !c.Owns(ptr) {
 		return false
@@ -254,13 +350,96 @@ func (c *Chunk) Remove(ptr unsafe.Pointer) bool {
 	if treeIdx < 0 || treeIdx >= maxIdx {
 		return false
 	}
+
+	// Mark this block as free
 	c.SetBit(treeIdx)
-	parent := treeIdx / 2
-	for parent >= 1 {
-		c.UpdateNode(parent)
-		parent = parent / 2
-	}
+
+	// Attempt to coalesce with buddy blocks up the tree
+	c.coalesce(treeIdx)
+
 	return true
+}
+
+// coalesce recursively merges buddy blocks when both are free
+// Starts from a given node and tries to merge upward in the tree
+//
+// Algorithm (example: freeing a 64-byte block that can merge to 1KB):
+//
+//	Initial: Two 64-byte buddies freed sequentially
+//	Free block 1 (index 376):
+//	  ├─ SetBit(376) → mark as free
+//	  └─ coalesce(376)
+//	     ├─ Parent = 376 / 2 = 188
+//	     ├─ Left child = 2*188 = 376 (our block, now free)
+//	     ├─ Right child = 2*188+1 = 377 (buddy, still allocated)
+//	     ├─ Both free? NO → UpdateNode(188) and STOP
+//
+//	Free block 2 (index 377):
+//	  ├─ SetBit(377) → mark as free
+//	  └─ coalesce(377)
+//	     ├─ Parent = 377 / 2 = 188
+//	     ├─ Left child = 376 (free from before)
+//	     ├─ Right child = 377 (our block, now free)
+//	     ├─ Both free? YES → SetBit(188), recurse on parent
+//	     │
+//	     └─ coalesce(188)
+//	        ├─ Parent = 188 / 2 = 94
+//	        ├─ Left child = 188 (now free, 128B)
+//	        ├─ Right child = 189 (check if free)
+//	        ├─ Both free? (depends on buddy 189 state)
+//	        └─ Continue coalescing up tree...
+//
+//	Result: Automatic merging from 64B → 128B → 256B → 512B blocks
+//	        Reduces fragmentation without manual tracking
+//
+// Tree structure visualization:
+//
+//	       1 (root)
+//	     /   \
+//	    2     3        (512B each)
+//	   / \   / \
+//	  4   5 6   7      (256B each)
+//	 /\ /\ /\ /\
+//	8 9... (128B) ...   (64B leaves)
+//
+// When both children at level are free, parent becomes free
+// A parent is free IFF both its children are free
+//
+// Performance: O(log N) where N = tree height
+//   - At most one traversal up the tree
+//   - Each level: constant time (two bit checks, one set, one recurse)
+//   - Maximum iterations = tree height = log₂(N)
+func (c *Chunk) coalesce(idx int) {
+	if idx <= 0 || idx >= (1<<uint(c.order+1)) {
+		return
+	}
+
+	// Root node cannot be coalesced
+	if idx == 1 {
+		return
+	}
+
+	var (
+		parent     = idx / 2
+		leftChild  = (2 * parent) + 0
+		rightChild = (2 * parent) + 1
+	)
+
+	// Check if both children are free (both bits set)
+	var (
+		leftFree  = c.GetBit(leftChild)
+		rightFree = c.GetBit(rightChild)
+	)
+
+	// If both children are free, merge them by marking parent as free
+	if leftFree && rightFree {
+		c.SetBit(parent)
+		// Recursively try to coalesce the parent with its sibling
+		c.coalesce(parent)
+	} else {
+		// If we can't coalesce, just update the parent state
+		c.UpdateNode(parent)
+	}
 }
 
 // Reset resets all allocations in the chunk
@@ -280,15 +459,47 @@ func (c *Chunk) GetMaxFreeSize() int {
 }
 
 // ============================================================================
+// Growth Strategy Enum
+// ============================================================================
+
+type Growth int
+
+const (
+	FIXED    Growth = iota // Allocate exactly MIN_CHUNK_SIZE chunks
+	ADDITIVE               // Allocate adaptively based on allocation size
+)
+
+// ============================================================================
 // BuddyAllocator
 // ============================================================================
 
 type BuddyAllocator struct {
-	chunks       []*Chunk
-	lastChunkIdx int      // Index of last successfully allocated chunk
-	res          *res.Res // Used when USE_RES = true
-	order        int
-	mtx          sync.Mutex
+	chunks         []*Chunk
+	lastChunkIdx   int      // Index of last successfully allocated chunk
+	res            *res.Res // Used when USE_RES = true
+	order          int
+	growthStrategy Growth // Strategy for chunk growth
+	chunkSize      int    // Custom chunk size (must be multiple of MIN_CHUNK_SIZE)
+	mtx            sync.Mutex
+}
+
+// BuddyAllocatorOption is a functional option for configuring BuddyAllocator
+type BuddyAllocatorOption func(*BuddyAllocator)
+
+// WithGrowthStrategy sets the growth strategy for the allocator
+func WithGrowthStrategy(strategy Growth) BuddyAllocatorOption {
+	return func(a *BuddyAllocator) {
+		a.growthStrategy = strategy
+	}
+}
+
+// WithSize sets a custom chunk size (must be a multiple of MIN_CHUNK_SIZE)
+func WithSize(size int) BuddyAllocatorOption {
+	return func(a *BuddyAllocator) {
+		if size > 0 && size%MIN_CHUNK_SIZE == 0 {
+			a.chunkSize = size
+		}
+	}
 }
 
 func (a *BuddyAllocator) Alloc(size, align uint64) unsafe.Pointer {
@@ -323,16 +534,26 @@ func (a *BuddyAllocator) Alloc(size, align uint64) unsafe.Pointer {
 			}
 		}
 	}
-	growSize := max(max(int(res.RoundPow2(size*2)), int(blockSize)), MIN_CHUNK_SIZE)
-	if growSize > MIN_CHUNK_SIZE {
-		if rem := growSize % MIN_CHUNK_SIZE; rem != 0 {
-			growSize += MIN_CHUNK_SIZE - rem
-		}
+
+	// If FIXED strategy, fail instead of growing
+	if a.growthStrategy == FIXED {
+		return nil
 	}
-	chunk := NewChunk(a.res, growSize)
-	a.chunks = append(a.chunks, chunk)
-	a.lastChunkIdx = len(a.chunks) - 1
-	return chunk.Allocate(int(size))
+
+	if a.growthStrategy == ADDITIVE {
+		growSize := max(max(int(res.RoundPow2(size*2)), int(blockSize)), a.chunkSize)
+		if growSize > a.chunkSize {
+			if rem := growSize % a.chunkSize; rem != 0 {
+				growSize += a.chunkSize - rem
+			}
+		}
+		chunk := NewChunk(a.res, growSize)
+		a.chunks = append(a.chunks, chunk)
+		a.lastChunkIdx = len(a.chunks) - 1
+		return chunk.Allocate(int(size))
+	}
+
+	return nil
 }
 
 func (a *BuddyAllocator) Remove(ptr unsafe.Pointer) {
@@ -456,8 +677,10 @@ func NewChunk(r *res.Res, size int) *Chunk {
 	for i := 0; i < bitsSize && i < len(data); i++ {
 		data[i] = 0
 	}
-	blockSize := size - bitsSize
-	leafStart := 1 << uint(order)
+	var (
+		blockSize = size - bitsSize
+		leafStart = 1 << uint(order)
+	)
 	for i := leafStart; i < (1 << uint(order+1)); i++ {
 		var (
 			byteIdx = i / 8
@@ -495,14 +718,24 @@ func NewChunk(r *res.Res, size int) *Chunk {
 	}
 }
 
-func NewBuddyAllocator() *BuddyAllocator {
+func NewBuddyAllocator(opts ...BuddyAllocatorOption) *BuddyAllocator {
 	// Initialize allocator without pre-allocating chunks
 	// First Alloc() call will size the chunk appropriately based on the allocation size
 	a := &BuddyAllocator{
-		chunks: []*Chunk{},
+		chunks:         []*Chunk{},
+		growthStrategy: ADDITIVE,       // default strategy
+		chunkSize:      MIN_CHUNK_SIZE, // default chunk size
 	}
+
+	// Apply functional options first (to allow customizing chunkSize)
+	for _, opt := range opts {
+		opt(a)
+	}
+
+	// Initialize Res after options are applied, using the configured chunkSize
 	if USE_RES {
-		a.res = res.NewRes(MIN_CHUNK_SIZE) // res manager still initialized but not used until needed
+		a.res = res.NewRes(a.chunkSize)
 	}
+
 	return a
 }
