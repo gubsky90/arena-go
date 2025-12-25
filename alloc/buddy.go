@@ -581,14 +581,19 @@ func (a *BuddyAllocator) Alloc(size, align uint64) unsafe.Pointer {
 	if size == 0 {
 		return nil
 	}
+
+	a.mtx.Lock()
+	defer a.mtx.Unlock()
+
+	if a.chunks == nil {
+		panic("BuddyAllocator: used after Delete")
+	}
+
 	if align == 0 {
 		align = 8
 	}
 	align = res.RoundPow2(align)
 	blockSize := max(max(res.RoundPow2(size), align), MIN_BLOCK_SIZE)
-
-	a.mtx.Lock()
-	defer a.mtx.Unlock()
 
 	// Try last chunk first (cache locality)
 	if a.lastChunkIdx >= 0 && a.lastChunkIdx < len(a.chunks) {
@@ -700,25 +705,26 @@ func (a *BuddyAllocator) Remove(ptr unsafe.Pointer) {
 func (a *BuddyAllocator) Reset() {
 	a.mtx.Lock()
 	defer a.mtx.Unlock()
+	if a.chunks == nil {
+		return
+	}
 	for _, chunk := range a.chunks {
 		chunk.Reset()
 	}
+	a.lastChunkIdx = -1
 }
 
 func (a *BuddyAllocator) Delete() {
 	a.mtx.Lock()
 	defer a.mtx.Unlock()
-	if USE_RES {
+	if a.chunks != nil {
+		a.chunks = nil
+		a.lastChunkIdx = -1
 		if a.res != nil {
 			a.res.Delete()
 			a.res = nil
 		}
-	} else {
-		for _, chunk := range a.chunks {
-			res.ReleasePages(chunk.data)
-		}
 	}
-	a.chunks = nil
 }
 
 func (a *BuddyAllocator) Owns(ptr unsafe.Pointer) bool {
@@ -728,6 +734,10 @@ func (a *BuddyAllocator) Owns(ptr unsafe.Pointer) bool {
 
 	a.mtx.Lock()
 	defer a.mtx.Unlock()
+
+	if a.chunks == nil {
+		return false
+	}
 
 	// Binary search to find the chunk that owns this pointer
 	chunk := a.findChunkByAddress(uintptr(ptr))
@@ -801,6 +811,7 @@ func NewBuddyAllocator(opts ...BuddyAllocatorOption) *BuddyAllocator {
 		chunks:         []*Chunk{},
 		growthStrategy: ADDITIVE,       // default strategy
 		chunkSize:      MIN_CHUNK_SIZE, // default chunk size
+		lastChunkIdx:   -1,
 	}
 
 	// Apply functional options first (to allow customizing chunkSize)
