@@ -407,8 +407,10 @@ func (c *Chunk) Remove(ptr unsafe.Pointer) bool {
 				break
 			}
 			// If it's an internal node, it's the block if its children bits are 0.
-			left := 2 * curr
-			right := 2*curr + 1
+			var (
+				left  = (2 * curr) + 0
+				right = (2 * curr) + 1
+			)
 			if !c.GetBit(left) && !c.GetBit(right) {
 				break
 			}
@@ -556,12 +558,22 @@ func WithGrowthStrategy(strategy Growth) BuddyAllocatorOption {
 	}
 }
 
-// WithSize sets a custom chunk size (must be a multiple of MIN_CHUNK_SIZE)
+// WithSize sets a custom data size (rounded to nearest multiple of MIN_DATA_SIZE)
 func WithSize(size int) BuddyAllocatorOption {
 	return func(a *BuddyAllocator) {
-		if size > 0 && size%MIN_CHUNK_SIZE == 0 {
-			a.chunkSize = size
+		var (
+			bitmapSize = MIN_BITMAP_SIZE
+			dataSize   = MIN_DATA_SIZE
+		)
+		if size > 0 {
+			// Round up to nearest multiple of MIN_DATA_SIZE
+			if rem := size % MIN_DATA_SIZE; rem != 0 {
+				size = size + (MIN_DATA_SIZE - rem)
+			}
+			dataSize = size
+			bitmapSize = (dataSize / MIN_DATA_SIZE) * MIN_BITMAP_SIZE
 		}
+		a.chunkSize = dataSize + bitmapSize
 	}
 }
 
@@ -573,8 +585,7 @@ func (a *BuddyAllocator) Alloc(size, align uint64) unsafe.Pointer {
 		align = 8
 	}
 	align = res.RoundPow2(align)
-	blockSize := max(res.RoundPow2(size), align)
-	blockSize = max(blockSize, MIN_BLOCK_SIZE)
+	blockSize := max(max(res.RoundPow2(size), align), MIN_BLOCK_SIZE)
 
 	a.mtx.Lock()
 	defer a.mtx.Unlock()
@@ -591,8 +602,10 @@ func (a *BuddyAllocator) Alloc(size, align uint64) unsafe.Pointer {
 
 	// Find best-fit chunk (smallest suitable chunk with available space)
 	// Use single-pass linear search - O(n) is better than sorting O(n log n) for typical cases
-	var bestIdx int = -1
-	var bestSize int = int(^uint(0) >> 1) // max int
+	var (
+		bestIdx  int = -1
+		bestSize int = int(^uint(0) >> 1) // max int
+	)
 
 	for i, chunk := range a.chunks {
 		chunkCapacity := 1 << uint(chunk.order)
@@ -741,9 +754,11 @@ func NewChunk(r *res.Res, size int) *Chunk {
 	// Total bits = 2 * numLeaves - 1
 	order := 0
 	for {
-		numLeaves := 1 << uint(order)
-		totalNodes := (1 << uint(order+1)) - 1
-		testBitsSize := (totalNodes + 7) / QWORD_SIZE_BITS * QWORD_SIZE_BYTES
+		var (
+			numLeaves    = 1 << uint(order)
+			totalNodes   = (1 << uint(order+1)) - 1
+			testBitsSize = (totalNodes + 7) / QWORD_SIZE_BITS * QWORD_SIZE_BYTES
+		)
 		if (numLeaves*MIN_BLOCK_SIZE)+testBitsSize > size {
 			order--
 			break

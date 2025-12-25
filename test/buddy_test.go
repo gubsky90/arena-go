@@ -554,10 +554,7 @@ func TestBuddy_100KTypesAlignment(t *testing.T) {
 
 	for i := range count {
 		// int8 (1 byte alignment)
-		p8 := arena.Alloc[int8](a)
-		if uintptr(unsafe.Pointer(p8))%1 != 0 {
-			t.Errorf("int8 %d: addr %p not aligned to 1 byte", i, p8)
-		}
+		_ = arena.Alloc[int8](a)
 
 		// int16 (2 byte alignment)
 		p16 := arena.Alloc[int16](a)
@@ -589,10 +586,7 @@ func TestBuddy_100KArray1000TypesAlignment(t *testing.T) {
 
 	for i := range count {
 		// [1000]int8 (1 byte alignment)
-		p8 := arena.Alloc[[1000]int8](a)
-		if uintptr(unsafe.Pointer(p8))%1 != 0 {
-			t.Errorf("[1000]int8 %d: addr %p not aligned to 1 byte", i, p8)
-		}
+		_ = arena.Alloc[[1000]int8](a)
 
 		// [1000]int16 (2 byte alignment)
 		p16 := arena.Alloc[[1000]int16](a)
@@ -651,10 +645,6 @@ func TestBuddy_RandomTypesLambda(t *testing.T) {
 			t.Fatalf("int8 allocation failed at counter %d", counter)
 		}
 		*ptr = int8(counter % 128)
-		addr := uintptr(unsafe.Pointer(ptr))
-		if addr%1 != 0 {
-			t.Errorf("int8 counter %d: addr %#x not aligned to 1 byte", counter, addr)
-		}
 		counter++
 	}
 
