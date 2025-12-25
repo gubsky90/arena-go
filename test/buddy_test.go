@@ -1,57 +1,17 @@
 package test
 
 import (
+	"fmt"
+	"math/rand"
+	"sync"
 	"testing"
 	"unsafe"
 
 	"github.com/thebagchi/arena-go"
 	"github.com/thebagchi/arena-go/alloc"
+	"github.com/thebagchi/arena-go/container"
 	"github.com/thebagchi/arena-go/res"
 )
-
-func TestBuddy_100KInt64(t *testing.T) {
-	a := arena.New(alloc.NewBuddyAllocator())
-	defer a.Delete()
-
-	const count = 100_000
-	ptrs := make([]*int64, count)
-
-	for i := range count {
-		ptrs[i] = arena.Alloc[int64](a)
-		if ptrs[i] == nil {
-			t.Fatalf("allocation %d failed", i)
-		}
-		*ptrs[i] = int64(i)
-	}
-
-	for i := range count {
-		addr := uintptr(unsafe.Pointer(ptrs[i]))
-		t.Logf("index %d: ptr=%p, addr=%#x", i, ptrs[i], addr)
-	}
-
-	seen := make(map[uintptr]bool)
-	pageCounts := make(map[uintptr]int)
-	for i := range count {
-		addr := uintptr(unsafe.Pointer(ptrs[i]))
-		if seen[addr] {
-			t.Errorf("duplicate address at index %d: %#x", i, addr)
-		}
-		seen[addr] = true
-		if *ptrs[i] != int64(i) {
-			t.Errorf("index %d: expected %d, got %d", i, i, *ptrs[i])
-		}
-		page := addr / uintptr(res.PAGE_SIZE)
-		pageCounts[page]++
-	}
-
-	// Log page usage
-	for page, count := range pageCounts {
-		pageAddr := page * uintptr(res.PAGE_SIZE)
-		t.Logf("Page %#x: %d allocations", pageAddr, count)
-	}
-
-	t.Logf("Successfully allocated and verified %d int64 values", count)
-}
 
 func TestBuddy_ReallocOrder(t *testing.T) {
 	a := arena.New(alloc.NewBuddyAllocator())
@@ -165,6 +125,127 @@ func TestBuddy_FragmentationRecovery(t *testing.T) {
 	}
 
 	t.Logf("Successfully verified allocation order after freeing odd pointers")
+}
+
+func TestBuddy_100KInt64(t *testing.T) {
+	a := arena.New(alloc.NewBuddyAllocator())
+	defer a.Delete()
+
+	const count = 100_000
+	ptrs := make([]*int64, count)
+
+	for i := range count {
+		ptrs[i] = arena.Alloc[int64](a)
+		if ptrs[i] == nil {
+			t.Fatalf("allocation %d failed", i)
+		}
+		*ptrs[i] = int64(i)
+	}
+
+	for i := range count {
+		addr := uintptr(unsafe.Pointer(ptrs[i]))
+		t.Logf("index %d: ptr=%p, addr=%#x", i, ptrs[i], addr)
+	}
+
+	seen := make(map[uintptr]bool)
+	pageCounts := make(map[uintptr]int)
+	for i := range count {
+		addr := uintptr(unsafe.Pointer(ptrs[i]))
+		if seen[addr] {
+			t.Errorf("duplicate address at index %d: %#x", i, addr)
+		}
+		seen[addr] = true
+		if *ptrs[i] != int64(i) {
+			t.Errorf("index %d: expected %d, got %d", i, i, *ptrs[i])
+		}
+		page := addr / uintptr(res.PAGE_SIZE)
+		pageCounts[page]++
+	}
+
+	// Log page usage
+	for page, count := range pageCounts {
+		pageAddr := page * uintptr(res.PAGE_SIZE)
+		t.Logf("Page %#x: %d allocations", pageAddr, count)
+	}
+
+	t.Logf("Successfully allocated and verified %d int64 values", count)
+}
+
+func TestBuddy_1MInt64(t *testing.T) {
+	a := arena.New(alloc.NewBuddyAllocator(alloc.WithSize(1000 * res.PAGE_SIZE)))
+	defer a.Delete()
+
+	const count = 1_000_000
+	ptrs := make([]*int64, count)
+
+	for i := range count {
+		ptrs[i] = arena.Alloc[int64](a)
+		if ptrs[i] == nil {
+			t.Fatalf("allocation %d failed", i)
+		}
+		*ptrs[i] = int64(i)
+	}
+
+	seen := make(map[uintptr]bool)
+	pageCounts := make(map[uintptr]int)
+	for i := range count {
+		addr := uintptr(unsafe.Pointer(ptrs[i]))
+		if seen[addr] {
+			t.Errorf("duplicate address at index %d: %#x", i, addr)
+		}
+		seen[addr] = true
+		if *ptrs[i] != int64(i) {
+			t.Errorf("index %d: expected %d, got %d", i, i, *ptrs[i])
+		}
+		page := addr / uintptr(res.PAGE_SIZE)
+		pageCounts[page]++
+	}
+
+	// Log page usage
+	for page, count := range pageCounts {
+		pageAddr := page * uintptr(res.PAGE_SIZE)
+		t.Logf("Page %#x: %d allocations", pageAddr, count)
+	}
+
+	t.Logf("Successfully allocated and verified %d int64 values", count)
+}
+
+func TestBuddy_100KStrings(t *testing.T) {
+	a := arena.New(alloc.NewBuddyAllocator())
+	defer a.Delete()
+
+	const count = 100_000
+	strs := make([]string, count)
+
+	for i := range count {
+		s := fmt.Sprintf("string value %d", i)
+		strs[i] = a.MakeString(s)
+		if strs[i] != s {
+			t.Fatalf("string %d mismatch: expected %q, got %q", i, s, strs[i])
+		}
+	}
+
+	pageCounts := make(map[uintptr]int)
+	for i := range count {
+		s := fmt.Sprintf("string value %d", i)
+		if strs[i] != s {
+			t.Errorf("string %d verification failed: expected %q, got %q", i, s, strs[i])
+		}
+		// Get address of string data
+		if len(strs[i]) > 0 {
+			addr := (*[2]uintptr)(unsafe.Pointer(&strs[i]))[1]
+			page := addr / uintptr(res.PAGE_SIZE)
+			pageCounts[page]++
+		}
+	}
+
+	// Log page usage
+	for page, count := range pageCounts {
+		pageAddr := page * uintptr(res.PAGE_SIZE)
+		t.Logf("Page %#x: %d allocations", pageAddr, count)
+	}
+
+	t.Logf("Successfully allocated and verified %d strings", count)
 }
 
 func TestBuddy_100KInt32(t *testing.T) {
@@ -463,4 +544,675 @@ func TestBuddy_100KTestStruct(t *testing.T) {
 	}
 
 	t.Logf("Successfully allocated and verified %d TestStruct values", count)
+}
+
+func TestBuddy_100KTypesAlignment(t *testing.T) {
+	a := arena.New(alloc.NewBuddyAllocator())
+	defer a.Delete()
+
+	const count = 100_000
+
+	for i := range count {
+		// int8 (1 byte alignment)
+		p8 := arena.Alloc[int8](a)
+		if uintptr(unsafe.Pointer(p8))%1 != 0 {
+			t.Errorf("int8 %d: addr %p not aligned to 1 byte", i, p8)
+		}
+
+		// int16 (2 byte alignment)
+		p16 := arena.Alloc[int16](a)
+		if uintptr(unsafe.Pointer(p16))%2 != 0 {
+			t.Errorf("int16 %d: addr %p not aligned to 2 bytes", i, p16)
+		}
+
+		// int32 (4 byte alignment)
+		p32 := arena.Alloc[int32](a)
+		if uintptr(unsafe.Pointer(p32))%4 != 0 {
+			t.Errorf("int32 %d: addr %p not aligned to 4 bytes", i, p32)
+		}
+
+		// int64 (8 byte alignment)
+		p64 := arena.Alloc[int64](a)
+		if uintptr(unsafe.Pointer(p64))%8 != 0 {
+			t.Errorf("int64 %d: addr %p not aligned to 8 bytes", i, p64)
+		}
+	}
+
+	t.Logf("Successfully verified alignment for %d allocations of various types", count)
+}
+
+func TestBuddy_100KArray1000TypesAlignment(t *testing.T) {
+	a := arena.New(alloc.NewBuddyAllocator())
+	defer a.Delete()
+
+	const count = 100_000
+
+	for i := range count {
+		// [1000]int8 (1 byte alignment)
+		p8 := arena.Alloc[[1000]int8](a)
+		if uintptr(unsafe.Pointer(p8))%1 != 0 {
+			t.Errorf("[1000]int8 %d: addr %p not aligned to 1 byte", i, p8)
+		}
+
+		// [1000]int16 (2 byte alignment)
+		p16 := arena.Alloc[[1000]int16](a)
+		if uintptr(unsafe.Pointer(p16))%2 != 0 {
+			t.Errorf("[1000]int16 %d: addr %p not aligned to 2 bytes", i, p16)
+		}
+
+		// [1000]int32 (4 byte alignment)
+		p32 := arena.Alloc[[1000]int32](a)
+		if uintptr(unsafe.Pointer(p32))%4 != 0 {
+			t.Errorf("[1000]int32 %d: addr %p not aligned to 4 bytes", i, p32)
+		}
+
+		// [1000]int64 (8 byte alignment)
+		p64 := arena.Alloc[[1000]int64](a)
+		if uintptr(unsafe.Pointer(p64))%8 != 0 {
+			t.Errorf("[1000]int64 %d: addr %p not aligned to 8 bytes", i, p64)
+		}
+	}
+
+	t.Logf("Successfully verified alignment for %d allocations of various array types", count)
+}
+
+func TestBuddy_AppendSlice(t *testing.T) {
+	a := arena.New(alloc.NewBuddyAllocator())
+	defer a.Delete()
+
+	slice := arena.MakeSlice[int](a, 0, 10)
+	for i := 0; i < 100; i++ {
+		slice = arena.Append(a, slice, i)
+	}
+
+	if len(slice) != 100 {
+		t.Errorf("Expected length 100, got %d", len(slice))
+	}
+
+	for i, v := range slice {
+		if v != i {
+			t.Errorf("index %d: expected %d, got %d", i, i, v)
+		}
+	}
+
+	t.Logf("Successfully verified Append for slice")
+}
+
+func TestBuddy_RandomTypesLambda(t *testing.T) {
+	a := arena.New(alloc.NewBuddyAllocator())
+	defer a.Delete()
+
+	const iterations = 100_000
+	counter := 0
+
+	allocInt8 := func() {
+		ptr := arena.Alloc[int8](a)
+		if ptr == nil {
+			t.Fatalf("int8 allocation failed at counter %d", counter)
+		}
+		*ptr = int8(counter % 128)
+		addr := uintptr(unsafe.Pointer(ptr))
+		if addr%1 != 0 {
+			t.Errorf("int8 counter %d: addr %#x not aligned to 1 byte", counter, addr)
+		}
+		counter++
+	}
+
+	allocInt16 := func() {
+		ptr := arena.Alloc[int16](a)
+		if ptr == nil {
+			t.Fatalf("int16 allocation failed at counter %d", counter)
+		}
+		*ptr = int16(counter % 32768)
+		addr := uintptr(unsafe.Pointer(ptr))
+		if addr%2 != 0 {
+			t.Errorf("int16 counter %d: addr %#x not aligned to 2 bytes", counter, addr)
+		}
+		counter++
+	}
+
+	allocInt32 := func() {
+		ptr := arena.Alloc[int32](a)
+		if ptr == nil {
+			t.Fatalf("int32 allocation failed at counter %d", counter)
+		}
+		*ptr = int32(counter)
+		addr := uintptr(unsafe.Pointer(ptr))
+		if addr%4 != 0 {
+			t.Errorf("int32 counter %d: addr %#x not aligned to 4 bytes", counter, addr)
+		}
+		counter++
+	}
+
+	allocInt64 := func() {
+		ptr := arena.Alloc[int64](a)
+		if ptr == nil {
+			t.Fatalf("int64 allocation failed at counter %d", counter)
+		}
+		*ptr = int64(counter)
+		addr := uintptr(unsafe.Pointer(ptr))
+		if addr%8 != 0 {
+			t.Errorf("int64 counter %d: addr %#x not aligned to 8 bytes", counter, addr)
+		}
+		counter++
+	}
+
+	allocFloat32 := func() {
+		ptr := arena.Alloc[float32](a)
+		if ptr == nil {
+			t.Fatalf("float32 allocation failed at counter %d", counter)
+		}
+		*ptr = float32(counter) + 0.5
+		addr := uintptr(unsafe.Pointer(ptr))
+		if addr%4 != 0 {
+			t.Errorf("float32 counter %d: addr %#x not aligned to 4 bytes", counter, addr)
+		}
+		counter++
+	}
+
+	allocFloat64 := func() {
+		ptr := arena.Alloc[float64](a)
+		if ptr == nil {
+			t.Fatalf("float64 allocation failed at counter %d", counter)
+		}
+		*ptr = float64(counter) + 0.5
+		addr := uintptr(unsafe.Pointer(ptr))
+		if addr%8 != 0 {
+			t.Errorf("float64 counter %d: addr %#x not aligned to 8 bytes", counter, addr)
+		}
+		counter++
+	}
+
+	allocators := []func(){allocInt8, allocInt16, allocInt32, allocInt64, allocFloat32, allocFloat64}
+
+	for range iterations {
+		rand.Shuffle(len(allocators), func(i, j int) {
+			allocators[i], allocators[j] = allocators[j], allocators[i]
+		})
+		for _, allocFunc := range allocators {
+			allocFunc()
+		}
+	}
+
+	t.Logf("Successfully allocated and verified alignment for %d iterations of random type allocations", iterations)
+}
+
+func TestBuddy_ExpandCases(t *testing.T) {
+	a := arena.New(alloc.NewBuddyAllocator())
+	defer a.Delete()
+
+	t.Run("EXPANDCASE1_SINGLEELEMENTNOGROWTH", func(t *testing.T) {
+		slice := arena.MakeSlice[int](a, 2, 4)
+		slice[0] = 1
+		slice[1] = 2
+
+		originalCap := cap(slice)
+		originalPtr := &slice[0]
+
+		slice = arena.Append(a, slice, 3)
+
+		if len(slice) != 3 {
+			t.Errorf("Expected length 3, got %d", len(slice))
+		}
+		if cap(slice) != originalCap {
+			t.Errorf("Capacity changed unexpectedly: was %d, now %d", originalCap, cap(slice))
+		}
+		if &slice[0] != originalPtr {
+			t.Errorf("Slice backing changed unexpectedly")
+		}
+		if slice[0] != 1 || slice[1] != 2 || slice[2] != 3 {
+			t.Errorf("Slice values incorrect: %v", slice)
+		}
+	})
+
+	t.Run("EXPANDCASE2_SINGLEELEMENTWITHGROWTH", func(t *testing.T) {
+		slice := arena.MakeSlice[int](a, 2, 2)
+		slice[0] = 1
+		slice[1] = 2
+
+		originalCap := cap(slice)
+		originalPtr := &slice[0]
+
+		slice = arena.Append(a, slice, 3)
+
+		if len(slice) != 3 {
+			t.Errorf("Expected length 3, got %d", len(slice))
+		}
+		if cap(slice) <= originalCap {
+			t.Errorf("Capacity did not grow: was %d, now %d", originalCap, cap(slice))
+		}
+		if &slice[0] == originalPtr {
+			t.Errorf("Slice backing should have changed")
+		}
+		if slice[0] != 1 || slice[1] != 2 || slice[2] != 3 {
+			t.Errorf("Slice values incorrect: %v", slice)
+		}
+	})
+
+	t.Run("EXPANDCASE3_MULTIELEMENTNOGROWTH", func(t *testing.T) {
+		slice := arena.MakeSlice[int](a, 2, 6)
+		slice[0] = 1
+		slice[1] = 2
+
+		originalCap := cap(slice)
+		originalPtr := &slice[0]
+
+		slice = arena.Append(a, slice, 3, 4)
+
+		if len(slice) != 4 {
+			t.Errorf("Expected length 4, got %d", len(slice))
+		}
+		if cap(slice) != originalCap {
+			t.Errorf("Capacity changed unexpectedly: was %d, now %d", originalCap, cap(slice))
+		}
+		if &slice[0] != originalPtr {
+			t.Errorf("Slice backing changed unexpectedly")
+		}
+		expected := []int{1, 2, 3, 4}
+		for i, v := range expected {
+			if slice[i] != v {
+				t.Errorf("Slice[%d] incorrect: expected %d, got %d", i, v, slice[i])
+			}
+		}
+	})
+
+	t.Run("EXPANDCASE4_MULTIELEMENTWITHGROWTH", func(t *testing.T) {
+		slice := arena.MakeSlice[int](a, 2, 3)
+		slice[0] = 1
+		slice[1] = 2
+
+		originalCap := cap(slice)
+		originalPtr := &slice[0]
+
+		slice = arena.Append(a, slice, 3, 4, 5)
+
+		if len(slice) != 5 {
+			t.Errorf("Expected length 5, got %d", len(slice))
+		}
+		if cap(slice) <= originalCap {
+			t.Errorf("Capacity did not grow: was %d, now %d", originalCap, cap(slice))
+		}
+		if &slice[0] == originalPtr {
+			t.Errorf("Slice backing should have changed")
+		}
+		expected := []int{1, 2, 3, 4, 5}
+		for i, v := range expected {
+			if slice[i] != v {
+				t.Errorf("Slice[%d] incorrect: expected %d, got %d", i, v, slice[i])
+			}
+		}
+	})
+
+	t.Run("EXPANDCASE5_APPENDTOEMPTYSLICE", func(t *testing.T) {
+		slice := arena.MakeSlice[int](a, 0, 2)
+
+		slice = arena.Append(a, slice, 10)
+
+		if len(slice) != 1 {
+			t.Errorf("Expected length 1, got %d", len(slice))
+		}
+		if cap(slice) < 1 {
+			t.Errorf("Capacity should be at least 1, got %d", cap(slice))
+		}
+		if slice[0] != 10 {
+			t.Errorf("Slice[0] incorrect: expected 10, got %d", slice[0])
+		}
+	})
+}
+
+func TestBuddy_StressTest(t *testing.T) {
+	a := arena.New(alloc.NewBuddyAllocator())
+	defer a.Delete()
+
+	const totalIterations = 1_000_000
+	const resetInterval = 10_000
+
+	counter := 0
+
+	allocInt32 := func() {
+		ptr := arena.Alloc[int32](a)
+		if ptr == nil {
+			t.Fatalf("int32 allocation failed at counter %d", counter)
+		}
+		*ptr = int32(counter)
+		counter++
+	}
+
+	allocInt64 := func() {
+		ptr := arena.Alloc[int64](a)
+		if ptr == nil {
+			t.Fatalf("int64 allocation failed at counter %d", counter)
+		}
+		*ptr = int64(counter)
+		counter++
+	}
+
+	allocFloat64 := func() {
+		ptr := arena.Alloc[float64](a)
+		if ptr == nil {
+			t.Fatalf("float64 allocation failed at counter %d", counter)
+		}
+		*ptr = float64(counter) + 0.5
+		counter++
+	}
+
+	allocSlice := func() {
+		slice := arena.MakeSlice[int](a, 0, 10)
+		for i := 0; i < 5; i++ {
+			slice = arena.Append(a, slice, counter+i)
+		}
+		counter += 5
+	}
+
+	allocators := []func(){allocInt32, allocInt64, allocFloat64, allocSlice}
+
+	for i := range totalIterations {
+		// Randomly select an allocator
+		idx := rand.Intn(len(allocators))
+		allocators[idx]()
+
+		// Reset arena periodically
+		if (i+1)%resetInterval == 0 {
+			a.Reset()
+			counter = 0 // Reset counter to avoid large numbers
+		}
+	}
+
+	t.Logf("Stress test completed: %d iterations with periodic resets", totalIterations)
+}
+
+func TestBuddy_ConcurrentAllocations(t *testing.T) {
+	const numGoroutines = 10
+	const allocationsPerGoroutine = 1000
+
+	var wg sync.WaitGroup
+	errors := make(chan error, numGoroutines)
+
+	for i := range numGoroutines {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			a := arena.New(alloc.NewBuddyAllocator())
+			defer a.Delete()
+
+			// Allocate and verify various types
+			for j := 0; j < allocationsPerGoroutine; j++ {
+				intPtr := arena.Alloc[int](a)
+				if intPtr == nil {
+					errors <- fmt.Errorf("goroutine %d: failed to alloc int %d", id, j)
+					return
+				}
+				*intPtr = j
+
+				int64Ptr := arena.Alloc[int64](a)
+				if int64Ptr == nil {
+					errors <- fmt.Errorf("goroutine %d: failed to alloc int64 %d", id, j)
+					return
+				}
+				*int64Ptr = int64(j)
+
+				float64Ptr := arena.Alloc[float64](a)
+				if float64Ptr == nil {
+					errors <- fmt.Errorf("goroutine %d: failed to alloc float64 %d", id, j)
+					return
+				}
+				*float64Ptr = float64(j) + 0.5
+
+				boolPtr := arena.Alloc[bool](a)
+				if boolPtr == nil {
+					errors <- fmt.Errorf("goroutine %d: failed to alloc bool %d", id, j)
+					return
+				}
+				*boolPtr = j%2 == 0
+
+				str := a.MakeString(fmt.Sprintf("goroutine %d string %d", id, j))
+				if str == "" {
+					errors <- fmt.Errorf("goroutine %d: failed to make string %d", id, j)
+					return
+				}
+
+				arrayPtr := arena.Alloc[[10]int](a)
+				if arrayPtr == nil {
+					errors <- fmt.Errorf("goroutine %d: failed to alloc array %d", id, j)
+					return
+				}
+				for k := range *arrayPtr {
+					(*arrayPtr)[k] = j + k
+				}
+
+				// Verify immediately
+				if *intPtr != j {
+					errors <- fmt.Errorf("goroutine %d: int verification failed for %d", id, j)
+					return
+				}
+				if *int64Ptr != int64(j) {
+					errors <- fmt.Errorf("goroutine %d: int64 verification failed for %d", id, j)
+					return
+				}
+				if *float64Ptr != float64(j)+0.5 {
+					errors <- fmt.Errorf("goroutine %d: float64 verification failed for %d", id, j)
+					return
+				}
+				if *boolPtr != (j%2 == 0) {
+					errors <- fmt.Errorf("goroutine %d: bool verification failed for %d", id, j)
+					return
+				}
+				expectedStr := fmt.Sprintf("goroutine %d string %d", id, j)
+				if str != expectedStr {
+					errors <- fmt.Errorf("goroutine %d: string verification failed for %d: got %q, expected %q", id, j, str, expectedStr)
+					return
+				}
+				for k := range *arrayPtr {
+					if (*arrayPtr)[k] != j+k {
+						errors <- fmt.Errorf("goroutine %d: array verification failed for %d, index %d", id, j, k)
+						return
+					}
+				}
+			}
+
+			a.Reset()
+		}(i)
+	}
+
+	wg.Wait()
+	close(errors)
+
+	// Check for errors
+	for err := range errors {
+		if err != nil {
+			t.Error(err)
+		}
+	}
+
+	t.Logf("Concurrent allocations completed successfully: %d goroutines, %d allocations each", numGoroutines, allocationsPerGoroutine)
+}
+
+func TestBuddy_InvalidInputs(t *testing.T) {
+	a := arena.New(alloc.NewBuddyAllocator())
+	defer a.Delete()
+
+	t.Run("MAKESLICE_NEGATIVELEN", func(t *testing.T) {
+		slice := arena.MakeSlice[int](a, -1, 0)
+		if len(slice) != 0 || cap(slice) != 0 {
+			t.Errorf("Unexpected slice for negative len: len=%d, cap=%d", len(slice), cap(slice))
+		}
+	})
+
+	t.Run("MAKESLICE_NEGATIVECAP", func(t *testing.T) {
+		defer func() {
+			if r := recover(); r == nil {
+				t.Error("Expected panic for negative capacity in MakeSlice")
+			}
+		}()
+		arena.MakeSlice[int](a, 0, -1)
+	})
+
+	t.Run("MAKESLICE_LENGREATERTHANCAP", func(t *testing.T) {
+		defer func() {
+			if r := recover(); r == nil {
+				t.Error("Expected panic for len > cap in MakeSlice")
+			}
+		}()
+		arena.MakeSlice[int](a, 5, 3)
+	})
+
+	t.Run("MAKESTRING_EMPTY", func(t *testing.T) {
+		s := a.MakeString("")
+		if s != "" {
+			t.Errorf("Expected empty string, got %q", s)
+		}
+	})
+
+	t.Run("ALLOC_ZEROSIZE", func(t *testing.T) {
+		ptr := arena.Alloc[struct{}](a)
+		if ptr == nil {
+			t.Error("Failed to allocate zero-sized struct")
+		}
+	})
+
+	t.Run("RESET_AFTERDELETE", func(t *testing.T) {
+		a2 := arena.New(alloc.NewBuddyAllocator())
+		a2.Delete()
+		a2.Reset()
+	})
+
+	t.Run("ALLOC_AFTERDELETE", func(t *testing.T) {
+		a3 := arena.New(alloc.NewBuddyAllocator())
+		a3.Delete()
+		defer func() {
+			if r := recover(); r == nil {
+				t.Error("Expected panic when allocating after delete")
+			}
+		}()
+		arena.Alloc[int](a3)
+	})
+
+	t.Logf("Invalid input tests completed")
+}
+
+func TestBuddy_Vec_NativeTypes(t *testing.T) {
+	a := arena.New(alloc.NewBuddyAllocator())
+	defer a.Delete()
+
+	// Test Vec with int
+	vecInt := container.NewVec[int](a)
+	vecInt.AppendOne(1)
+	vecInt.AppendOne(2)
+	vecInt.AppendOne(3)
+	if vecInt.Len() != 3 {
+		t.Errorf("Vec[int] length: expected 3, got %d", vecInt.Len())
+	}
+	if vecInt.Slice()[0] != 1 || vecInt.Slice()[1] != 2 || vecInt.Slice()[2] != 3 {
+		t.Errorf("Vec[int] values incorrect: %v", vecInt.Slice())
+	}
+
+	// Test Vec with float64
+	vecFloat := container.NewVec[float64](a)
+	vecFloat.Append(1.1, 2.2, 3.3)
+	if vecFloat.Len() != 3 {
+		t.Errorf("Vec[float64] length: expected 3, got %d", vecFloat.Len())
+	}
+	expectedFloat := []float64{1.1, 2.2, 3.3}
+	for i, v := range vecFloat.Slice() {
+		if v != expectedFloat[i] {
+			t.Errorf("Vec[float64] index %d: expected %f, got %f", i, expectedFloat[i], v)
+		}
+	}
+
+	// Test Vec with string
+	vecString := container.NewVec[string](a)
+	vecString.AppendSlice([]string{"hello", "world"})
+	if vecString.Len() != 2 {
+		t.Errorf("Vec[string] length: expected 2, got %d", vecString.Len())
+	}
+	if vecString.Slice()[0] != "hello" || vecString.Slice()[1] != "world" {
+		t.Errorf("Vec[string] values incorrect: %v", vecString.Slice())
+	}
+
+	// Test Vec with bool
+	vecBool := container.NewVec[bool](a)
+	vecBool.Push(true)
+	vecBool.Push(false)
+	if vecBool.Len() != 2 {
+		t.Errorf("Vec[bool] length: expected 2, got %d", vecBool.Len())
+	}
+	if vecBool.Slice()[0] != true || vecBool.Slice()[1] != false {
+		t.Errorf("Vec[bool] values incorrect: %v", vecBool.Slice())
+	}
+
+	// Test Vec with byte
+	vecByte := container.NewVec[byte](a)
+	vecByte.AppendOne('A')
+	vecByte.AppendOne('B')
+	if vecByte.Len() != 2 {
+		t.Errorf("Vec[byte] length: expected 2, got %d", vecByte.Len())
+	}
+	if vecByte.Slice()[0] != 'A' || vecByte.Slice()[1] != 'B' {
+		t.Errorf("Vec[byte] values incorrect: %v", vecByte.Slice())
+	}
+
+	// Test Vec with 100K items for each type
+	const count = 100_000
+
+	// 100K int
+	vecIntLarge := container.NewVec[int](a)
+	for i := range count {
+		vecIntLarge.AppendOne(i)
+	}
+	if vecIntLarge.Len() != count {
+		t.Errorf("Vec[int] 100K length: expected %d, got %d", count, vecIntLarge.Len())
+	}
+	if vecIntLarge.Slice()[0] != 0 || vecIntLarge.Slice()[count-1] != count-1 {
+		t.Errorf("Vec[int] 100K first/last incorrect: first=%d, last=%d", vecIntLarge.Slice()[0], vecIntLarge.Slice()[count-1])
+	}
+
+	// 100K float64
+	vecFloatLarge := container.NewVec[float64](a)
+	for i := range count {
+		vecFloatLarge.AppendOne(float64(i) + 0.5)
+	}
+	if vecFloatLarge.Len() != count {
+		t.Errorf("Vec[float64] 100K length: expected %d, got %d", count, vecFloatLarge.Len())
+	}
+	if vecFloatLarge.Slice()[0] != 0.5 || vecFloatLarge.Slice()[count-1] != float64(count-1)+0.5 {
+		t.Errorf("Vec[float64] 100K first/last incorrect: first=%f, last=%f", vecFloatLarge.Slice()[0], vecFloatLarge.Slice()[count-1])
+	}
+
+	// 100K string
+	vecStringLarge := container.NewVec[string](a)
+	for i := range count {
+		vecStringLarge.AppendOne(a.MakeString(fmt.Sprintf("item%d", i)))
+	}
+	if vecStringLarge.Len() != count {
+		t.Errorf("Vec[string] 100K length: expected %d, got %d", count, vecStringLarge.Len())
+	}
+	if vecStringLarge.Slice()[0] != "item0" || vecStringLarge.Slice()[count-1] != fmt.Sprintf("item%d", count-1) {
+		t.Errorf("Vec[string] 100K first/last incorrect: first=%s, last=%s", vecStringLarge.Slice()[0], vecStringLarge.Slice()[count-1])
+	}
+
+	// 100K bool
+	vecBoolLarge := container.NewVec[bool](a)
+	for i := range count {
+		vecBoolLarge.AppendOne(i%2 == 0)
+	}
+	if vecBoolLarge.Len() != count {
+		t.Errorf("Vec[bool] 100K length: expected %d, got %d", count, vecBoolLarge.Len())
+	}
+	if vecBoolLarge.Slice()[0] != true || vecBoolLarge.Slice()[count-1] != ((count-1)%2 == 0) {
+		t.Errorf("Vec[bool] 100K first/last incorrect: first=%t, last=%t", vecBoolLarge.Slice()[0], vecBoolLarge.Slice()[count-1])
+	}
+
+	// 100K byte
+	vecByteLarge := container.NewVec[byte](a)
+	for i := range count {
+		vecByteLarge.AppendOne(byte(i % 256))
+	}
+	if vecByteLarge.Len() != count {
+		t.Errorf("Vec[byte] 100K length: expected %d, got %d", count, vecByteLarge.Len())
+	}
+	if vecByteLarge.Slice()[0] != 0 || vecByteLarge.Slice()[count-1] != byte((count-1)%256) {
+		t.Errorf("Vec[byte] 100K first/last incorrect: first=%d, last=%d", vecByteLarge.Slice()[0], vecByteLarge.Slice()[count-1])
+	}
+
+	t.Logf("Vec tests with native types completed successfully")
 }
