@@ -172,7 +172,10 @@ func TestBuddy_100KInt64(t *testing.T) {
 }
 
 func TestBuddy_1MInt64(t *testing.T) {
-	a := arena.New(alloc.NewBuddyAllocator(alloc.WithSize(1000 * res.PAGE_SIZE)))
+	a := arena.New(alloc.NewBuddyAllocator(
+		alloc.WithGrowthStrategy(alloc.FIXED),
+		alloc.WithSize(4000*res.PAGE_SIZE),
+	))
 	defer a.Delete()
 
 	const count = 1_000_000

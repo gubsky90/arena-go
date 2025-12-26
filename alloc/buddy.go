@@ -630,12 +630,15 @@ func (a *BuddyAllocator) Alloc(size, align uint64) unsafe.Pointer {
 		}
 	}
 
-	// If FIXED strategy, fail instead of growing
+	// If FIXED strategy and we have at least 1 chunk, don't grow
 	if a.growthStrategy == FIXED {
-		return nil
+		if len(a.chunks) >= 1 {
+			return nil
+		}
 	}
 
-	if a.growthStrategy == ADDITIVE {
+	// ADDITIVE always grows, FIXED grows only when chunks == 0
+	if a.growthStrategy == ADDITIVE || a.growthStrategy == FIXED {
 		growSize := max(max(int(res.RoundPow2(size*2)), int(blockSize)), a.chunkSize)
 		if growSize > a.chunkSize {
 			if rem := growSize % a.chunkSize; rem != 0 {
