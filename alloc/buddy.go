@@ -37,10 +37,27 @@ const (
 	QWORD_SIZE_BITS  = 64 // Number of bits in uint64
 )
 
+// Buddy Allocator Metadata Calculation:
+// A complete binary tree with L leaves has 2L - 1 total nodes.
+// Each node requires 1 bit in the bitmap.
+//
+// Formula:
+//
+//	Total Bits (8 * MIN_BITMAP_SIZE) >= 2 * (MIN_DATA_SIZE / MIN_BLOCK_SIZE)
+//	MIN_DATA_SIZE = (8 * MIN_BITMAP_SIZE / 2) * MIN_BLOCK_SIZE
+//	MIN_DATA_SIZE = MIN_BITMAP_SIZE * 4 * MIN_BLOCK_SIZE
+//
+// Example (16-bit bitmap):
+//
+//	MIN_BITMAP_SIZE = 2 bytes (16 bits)
+//	MIN_BLOCK_SIZE = 16 bytes
+//	Total Nodes = 2L - 1 <= 16 bits => L <= 8 leaves
+//	MIN_DATA_SIZE = 8 leaves * 16 bytes = 128 bytes
+//	Using formula: 2 * 4 * 16 = 128 bytes
 var (
 	MIN_BITMAP_SIZE = res.PAGE_SIZE                        // 4KB bitmap
-	MIN_DATA_SIZE   = MIN_BITMAP_SIZE * 8 * MIN_BLOCK_SIZE // Bitmap capacity: 4KB * 8 * 16B = 512KB
-	MIN_CHUNK_SIZE  = MIN_DATA_SIZE + MIN_BITMAP_SIZE      // Full utilization: 512KB data + 4KB bitmap = ~516KB
+	MIN_DATA_SIZE   = MIN_BITMAP_SIZE * 4 * MIN_BLOCK_SIZE // 4KB * 4 * 16B = 256KB
+	MIN_CHUNK_SIZE  = MIN_DATA_SIZE + MIN_BITMAP_SIZE      // Full utilization: 256KB data + 4KB bitmap = 260KB
 	USE_RES         = true                                 // Set to true to use Res manager, false for direct make()
 )
 
