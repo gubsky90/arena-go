@@ -1,6 +1,7 @@
 package alloc
 
 import (
+	"math/bits"
 	"sync"
 	"unsafe"
 
@@ -82,12 +83,27 @@ func (c *Chunk) PayloadOffset() int {
 	return c.bitsSize
 }
 
+// Order returns the tree order (height) of this chunk
+func (c *Chunk) Order() int {
+	return c.order
+}
+
+// BlockSize returns the total usable block size (payload size) for this chunk
+func (c *Chunk) BlockSize() int {
+	return c.blockSize
+}
+
+// BitsSize returns the bitmap size in bytes
+func (c *Chunk) BitsSize() int {
+	return c.bitsSize
+}
+
 // SetBit sets a bit in the bitset at given position using uint64 operations
 func (c *Chunk) SetBit(idx int) {
 	var (
-		qwordIdx    = idx / QWORD_SIZE_BITS
-		bitIdx      = uint(idx % QWORD_SIZE_BITS)
-		qwordOffset = qwordIdx * QWORD_SIZE_BYTES
+		qwordIdx    = idx >> 6         // idx / QWORD_SIZE_BITS (shift faster than division)
+		bitIdx      = uint(idx & 0x3F) // idx % QWORD_SIZE_BITS (mask faster than modulo)
+		qwordOffset = qwordIdx << 3    // qwordIdx * QWORD_SIZE_BYTES (shift by 3 for *8)
 	)
 	if qwordOffset+QWORD_SIZE_BYTES <= c.bitsSize {
 		// Read uint64, set bit, write back
@@ -100,9 +116,9 @@ func (c *Chunk) SetBit(idx int) {
 // ClearBit clears a bit in the bitset at given position using uint64 operations
 func (c *Chunk) ClearBit(idx int) {
 	var (
-		qwordIdx    = idx / QWORD_SIZE_BITS
-		bitIdx      = uint(idx % QWORD_SIZE_BITS)
-		qwordOffset = qwordIdx * QWORD_SIZE_BYTES
+		qwordIdx    = idx >> 6         // idx / QWORD_SIZE_BITS (shift faster than division)
+		bitIdx      = uint(idx & 0x3F) // idx % QWORD_SIZE_BITS (mask faster than modulo)
+		qwordOffset = qwordIdx << 3    // qwordIdx * QWORD_SIZE_BYTES (shift by 3 for *8)
 	)
 	if qwordOffset+QWORD_SIZE_BYTES <= c.bitsSize {
 		// Read uint64, clear bit, write back
@@ -115,9 +131,9 @@ func (c *Chunk) ClearBit(idx int) {
 // GetBit gets a bit from the bitset at given position using uint64 operations
 func (c *Chunk) GetBit(idx int) bool {
 	var (
-		qwordIdx    = idx / QWORD_SIZE_BITS
-		bitIdx      = uint(idx % QWORD_SIZE_BITS)
-		qwordOffset = qwordIdx * QWORD_SIZE_BYTES
+		qwordIdx    = idx >> 6         // idx / QWORD_SIZE_BITS (shift faster than division)
+		bitIdx      = uint(idx & 0x3F) // idx % QWORD_SIZE_BITS (mask faster than modulo)
+		qwordOffset = qwordIdx << 3    // qwordIdx * QWORD_SIZE_BYTES (shift by 3 for *8)
 	)
 	if qwordOffset+QWORD_SIZE_BYTES > c.bitsSize {
 		return false
@@ -141,15 +157,22 @@ func (c *Chunk) TreeIndex(offset int) int {
 }
 
 // OffsetForIndex calculates the payload offset for a given tree node index
+// Optimized with O(1) leading zeros calculation instead of loop
 func (c *Chunk) OffsetForIndex(idx int) int {
 	if idx <= 0 {
 		return 0
 	}
-	// Find the leftmost leaf under this node to determine its offset
-	for idx < (1 << uint(c.order)) {
-		idx = idx << 1
-	}
-	return (idx - (1 << uint(c.order))) * MIN_BLOCK_SIZE
+
+	// Calculate depth from root using leading zeros (O(1))
+	// Then compute leftmost leaf position and offset
+	var (
+		depthFromRoot = bits.UintSize - 1 - bits.LeadingZeros(uint(idx))
+		shiftsNeeded  = c.order - depthFromRoot
+		leftmostLeaf  = idx << uint(shiftsNeeded)
+	)
+
+	// Calculate offset from leaf index
+	return (leftmostLeaf - (1 << uint(c.order))) * MIN_BLOCK_SIZE
 }
 
 // UpdateNode updates a node and propagates changes up to root iteratively
@@ -228,9 +251,7 @@ func (c *Chunk) Allocate(size int) unsafe.Pointer {
 		return nil
 	}
 
-	var (
-		requiredSize = max(size, MIN_BLOCK_SIZE)
-	)
+	var requiredSize = max(size, MIN_BLOCK_SIZE)
 
 	// Find a free node at the appropriate size or larger
 	idx := c.FindFreeNode(1, requiredSize)
@@ -255,11 +276,11 @@ func (c *Chunk) Allocate(size int) unsafe.Pointer {
 		}
 	} else {
 		// No split occurred, meaning we allocated a block of size requiredSize.
-		// If this was the only block of size c.maxFreeSize, we should decrease it.
-		if requiredSize == c.maxFreeSize {
-			// Conservative estimate: next largest could be requiredSize / 2
-			c.maxFreeSize = requiredSize / 2
-		}
+		// If this was the only block of size c.maxFreeSize, we need to rescan.
+		// Don't guess - just mark that we need to check next allocation attempt.
+		// Conservative: set to 0 to trigger a rescan, or keep current value
+		// Actually, we should NOT decrease it here - let FindFreeNode handle it
+		// by returning -1 when no suitable block exists
 	}
 
 	return unsafe.Add(unsafe.Pointer(unsafe.SliceData(c.data)), c.PayloadOffset()+c.OffsetForIndex(idx))
@@ -272,16 +293,10 @@ func (c *Chunk) getSizeForIndex(idx int) int {
 	}
 
 	// Calculate block size based on depth from root
-	// Count how many times to divide idx by 2 until reaching root (idx=1)
-	// This gives depth from root: at each level down, size halves
-	var (
-		depthFromRoot = 0
-		temp          = idx
-	)
-	for temp > 1 {
-		temp = temp / 2
-		depthFromRoot = depthFromRoot + 1
-	}
+	// Depth from root = number of bits - 1 (position of highest set bit)
+	// Using bits.LeadingZeros for accurate O(1) tree depth calculation
+	// depthFromRoot = bits.UintSize - 1 - bits.LeadingZeros(idx)
+	depthFromRoot := bits.UintSize - 1 - bits.LeadingZeros(uint(idx))
 
 	// Size = blockSize >> depthFromRoot
 	// Root (depth=0): blockSize >> 0 = blockSize
@@ -375,21 +390,65 @@ func (c *Chunk) FindFreeNode(startIdx int, requiredSize int) int {
 		}
 
 		// If it's larger than requiredSize, descend to find a free sub-block.
-		// BUT ONLY if it's not fully allocated as a single block.
-		// A node is fully allocated if its bit is 1 but its children's bits are 0.
+		// We descend regardless of the current node's allocation state because:
+		// - If the node is free, children will be processed
+		// - If the node is allocated, we explore children for potential free blocks
+		left := (2 * idx) + 0
+		right := (2 * idx) + 1
+		if right < maxIdx {
+			// Always descend to check children for free blocks
+			stack = append(stack, right)
+			stack = append(stack, left)
+		}
+	}
+
+	// If no free node found, rescan the tree to update maxFreeSize
+	// This happens when our cached maxFreeSize is stale
+	c.updateMaxFreeSize()
+
+	return -1
+}
+
+// updateMaxFreeSize scans the tree to find the actual largest free block
+// Called when FindFreeNode returns -1 to update the stale cache
+func (c *Chunk) updateMaxFreeSize() {
+	var (
+		maxIdx      = 1 << uint(c.order+1)
+		maxFreeSize = 0
+		stack       = []int{1} // Start from root
+	)
+
+	for len(stack) > 0 {
+		idx := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+
+		if idx <= 0 || idx >= maxIdx {
+			continue
+		}
+
+		nodeSize := c.getSizeForIndex(idx)
+
+		// If this node is free (bit is 0), it's a candidate
+		if !c.GetBit(idx) {
+			if nodeSize > maxFreeSize {
+				maxFreeSize = nodeSize
+			}
+			// Don't descend further - entire subtree is free
+			continue
+		}
+
+		// If allocated, check children for free blocks
 		var (
 			left  = (2 * idx) + 0
 			right = (2 * idx) + 1
 		)
 		if right < maxIdx {
-			if c.GetBit(left) || c.GetBit(right) {
-				stack = append(stack, right)
-				stack = append(stack, left)
-			}
+			stack = append(stack, right)
+			stack = append(stack, left)
 		}
 	}
 
-	return -1
+	c.maxFreeSize = maxFreeSize
 }
 
 // Remove deallocates a pointer within this chunk's payload
@@ -399,14 +458,15 @@ func (c *Chunk) Remove(ptr unsafe.Pointer) bool {
 	if !c.Owns(ptr) {
 		return false
 	}
-	offset := int(uintptr(ptr)-c.startAddress) - c.PayloadOffset()
-	if offset < 0 || offset >= c.blockSize {
-		return false
-	}
+
 	var (
+		offset  = int(uintptr(ptr)-c.startAddress) - c.PayloadOffset()
 		treeIdx = c.TreeIndex(offset)
 		maxIdx  = 1 << uint(c.order+1)
 	)
+	if offset < 0 || offset >= c.blockSize {
+		return false
+	}
 	if treeIdx < 0 || treeIdx >= maxIdx {
 		return false
 	}
@@ -626,7 +686,7 @@ func (a *BuddyAllocator) Alloc(size, align uint64) unsafe.Pointer {
 	// Use single-pass linear search - O(n) is better than sorting O(n log n) for typical cases
 	var (
 		bestIdx  int = -1
-		bestSize int = int(^uint(0) >> 1) // max int
+		bestSize int = 1 << 31 // max int (using bit shift instead of expression)
 	)
 
 	for i, chunk := range a.chunks {
@@ -656,16 +716,18 @@ func (a *BuddyAllocator) Alloc(size, align uint64) unsafe.Pointer {
 
 	// ADDITIVE always grows, FIXED grows only when chunks == 0
 	if a.growthStrategy == ADDITIVE || a.growthStrategy == FIXED {
-		growSize := max(max(int(res.RoundPow2(size*2)), int(blockSize)), a.chunkSize)
+		var (
+			growSize  = max(max(int(res.RoundPow2(size*2)), int(blockSize)), a.chunkSize)
+			chunk     = NewChunk(a.res, growSize)
+			insertIdx = 0
+		)
 		if growSize > a.chunkSize {
 			if rem := growSize % a.chunkSize; rem != 0 {
 				growSize = growSize + a.chunkSize - rem
 			}
 		}
-		chunk := NewChunk(a.res, growSize)
 
 		// Insert chunk in sorted order by startAddress for binary search efficiency
-		insertIdx := 0
 		for insertIdx < len(a.chunks) && a.chunks[insertIdx].startAddress < chunk.startAddress {
 			insertIdx = insertIdx + 1
 		}
@@ -768,44 +830,40 @@ func (a *BuddyAllocator) Owns(ptr unsafe.Pointer) bool {
 // Utility Functions
 // ============================================================================
 
-// NewChunk creates a new chunk of given size with bitset metadata at the start
+// NewChunk creates a new chunk with the given total size request.
+// The function:
+// 1. Sets dataSize = requestedSize
+// 2. Calculates bitmap size using reverse formula: bitsSize = dataSize / (4 * MIN_BLOCK_SIZE)
+// 3. Rounds the total chunk size UP to the nearest MIN_DATA_SIZE boundary
+// 4. Requests memory from the allocator for the rounded size
 func NewChunk(r *res.Res, size int) *Chunk {
-	var data []byte
-	if r != nil {
-		page := r.New(size)
-		data = page.Base()
-	} else {
-		data = make([]byte, size)
-	}
-
-	// Find the largest power-of-2 block size that fits in the given size
-	// along with its required metadata bits.
-	// Each 16B block needs 1 bit at the leaf level, plus internal node bits.
-	// Total bits = 2 * numLeaves - 1
-	order := 0
-	for {
-		var (
-			numLeaves    = 1 << uint(order)
-			totalNodes   = (1 << uint(order+1)) - 1
-			testBitsSize = (totalNodes + 7) / QWORD_SIZE_BITS * QWORD_SIZE_BYTES
-		)
-		if (numLeaves*MIN_BLOCK_SIZE)+testBitsSize > size {
-			order--
-			break
-		}
-		order++
-	}
-
+	// Round up size to nearest power of 2 leaves using RoundPow2
+	// This ensures we get a size that supports an exact power-of-2 number of blocks
 	var (
-		numLeaves  = 1 << uint(order)
-		totalNodes = (1 << uint(order+1)) - 1
-		bitsSize   = (totalNodes + 7) / QWORD_SIZE_BITS * QWORD_SIZE_BYTES
-		blockSize  = numLeaves * MIN_BLOCK_SIZE
+		dataSize  = max(int(res.RoundPow2(uint64(size))), MIN_DATA_SIZE)
+		bitsSize  = dataSize / (4 * MIN_BLOCK_SIZE)
+		chunkSize = bitsSize + dataSize
 	)
 
-	// Initialize bitset in data buffer (all 0 = all free)
-	for i := 0; i < bitsSize && i < len(data); i++ {
-		data[i] = 0
+	// Request memory for the actual chunk size
+	var data []byte
+	if r != nil {
+		page := r.New(chunkSize)
+		data = page.Base()
+	} else {
+		data = make([]byte, chunkSize)
+	}
+
+	// Calculate order from available blocks
+	// Order is log2 of number of leaves (guaranteed power-of-2 after RoundPow2)
+	var (
+		numLeaves = dataSize / MIN_BLOCK_SIZE
+		order     = 0
+	)
+	if numLeaves > 0 {
+		// numLeaves is guaranteed to be power-of-2 after RoundPow2
+		// So order = bits.Len(numLeaves) - 1
+		order = bits.Len(uint(numLeaves)) - 1
 	}
 
 	startAddress := uintptr(unsafe.Pointer(unsafe.SliceData(data)))
@@ -813,10 +871,10 @@ func NewChunk(r *res.Res, size int) *Chunk {
 		data:         data,
 		startAddress: startAddress,
 		endAddress:   startAddress + uintptr(len(data)),
-		blockSize:    blockSize,
+		blockSize:    dataSize,
 		order:        order,
 		bitsSize:     bitsSize,
-		maxFreeSize:  blockSize, // entire chunk is initially free
+		maxFreeSize:  dataSize, // entire chunk is initially free
 	}
 
 	// Reset to ensure all bits are properly initialized to free state

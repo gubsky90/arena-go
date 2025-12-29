@@ -174,10 +174,11 @@ func TestBuddy_100KInt64(t *testing.T) {
 func TestBuddy_1MInt64(t *testing.T) {
 	a := arena.New(alloc.NewBuddyAllocator(
 		alloc.WithGrowthStrategy(alloc.FIXED),
+		alloc.WithSize(1_000_000*16),
 	))
 	defer a.Delete()
 
-	const count = 16384
+	const count = 1_000_000
 	ptrs := make([]*int64, count)
 
 	for i := range count {
