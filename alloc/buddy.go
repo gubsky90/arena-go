@@ -64,14 +64,16 @@ var (
 
 // Chunk wraps a byte slice with cached address bounds and size information
 // Uses a complete binary tree with bitset metadata stored at chunk start
+// Optimized for cache-friendliness: hot fields (startAddress, endAddress, blockSize, order)
+// grouped at start (~32B) fit in single cache line, data slice moved to end
 type Chunk struct {
-	data         []byte  // underlying byte slice with bitset header + payload
-	startAddress uintptr // start address
-	endAddress   uintptr // end address
-	blockSize    int     // data/block size (usable payload, after bitset)
-	order        int     // tree order (height)
-	bitsSize     int     // size of bitset in bytes
-	maxFreeSize  int     // cached maximum free block size (updated on Allocate/Remove)
+	startAddress     uintptr // start address (hot)
+	endAddress       uintptr // end address (hot)
+	blockSize        int     // data/block size (usable payload, after bitset) (hot)
+	order            int     // tree order (height) (hot)
+	bitsSize         int     // size of bitset in bytes (warm)
+	largestAvailable int     // largest contiguous free block available (updated on Allocate/Remove) (warm)
+	data             []byte  // underlying byte slice with bitset header + payload
 }
 
 func (c *Chunk) Base() []byte {
@@ -106,10 +108,7 @@ func (c *Chunk) SetBit(idx int) {
 		qwordOffset = qwordIdx << 3    // qwordIdx * QWORD_SIZE_BYTES (shift by 3 for *8)
 	)
 	if qwordOffset+QWORD_SIZE_BYTES <= c.bitsSize {
-		// Read uint64, set bit, write back
-		ptr := unsafe.Pointer(unsafe.SliceData(c.data[qwordOffset:]))
-		val := (*uint64)(ptr)
-		*val |= (1 << bitIdx)
+		*(*uint64)(unsafe.Pointer(unsafe.SliceData(c.data[qwordOffset:]))) |= (1 << bitIdx)
 	}
 }
 
@@ -121,10 +120,7 @@ func (c *Chunk) ClearBit(idx int) {
 		qwordOffset = qwordIdx << 3    // qwordIdx * QWORD_SIZE_BYTES (shift by 3 for *8)
 	)
 	if qwordOffset+QWORD_SIZE_BYTES <= c.bitsSize {
-		// Read uint64, clear bit, write back
-		ptr := unsafe.Pointer(unsafe.SliceData(c.data[qwordOffset:]))
-		val := (*uint64)(ptr)
-		*val &= ^(1 << bitIdx)
+		*(*uint64)(unsafe.Pointer(unsafe.SliceData(c.data[qwordOffset:]))) &= ^(1 << bitIdx)
 	}
 }
 
@@ -138,9 +134,7 @@ func (c *Chunk) GetBit(idx int) bool {
 	if qwordOffset+QWORD_SIZE_BYTES > c.bitsSize {
 		return false
 	}
-	ptr := unsafe.Pointer(unsafe.SliceData(c.data[qwordOffset:]))
-	val := (*uint64)(ptr)
-	return (*val & (1 << bitIdx)) != 0
+	return (*(*uint64)(unsafe.Pointer(unsafe.SliceData(c.data[qwordOffset:]))) & (1 << bitIdx)) != 0
 }
 
 // Owns checks if a pointer falls within this chunk's address bounds
@@ -247,7 +241,7 @@ func (c *Chunk) Allocate(size int) unsafe.Pointer {
 		return nil
 	}
 	size = max(size, MIN_BLOCK_SIZE)
-	if c.maxFreeSize < size {
+	if c.largestAvailable < size {
 		return nil
 	}
 
@@ -269,10 +263,10 @@ func (c *Chunk) Allocate(size int) unsafe.Pointer {
 	// Update parent chain
 	c.UpdateNode(idx / 2)
 
-	// Update cached max free size: track largest buddy from split or existing max
+	// Update cached largest available: track largest buddy from split or existing max
 	if maxFreeBuddySize > 0 {
-		if maxFreeBuddySize > c.maxFreeSize {
-			c.maxFreeSize = maxFreeBuddySize
+		if maxFreeBuddySize > c.largestAvailable {
+			c.largestAvailable = maxFreeBuddySize
 		}
 	} else {
 		// No split occurred, meaning we allocated a block of size requiredSize.
@@ -402,8 +396,8 @@ func (c *Chunk) FindFreeNode(startIdx int, requiredSize int) int {
 		}
 	}
 
-	// If no free node found, rescan the tree to update maxFreeSize
-	// This happens when our cached maxFreeSize is stale
+	// If no free node found, rescan the tree to update largestAvailable
+	// This happens when our cached largestAvailable is stale
 	c.updateMaxFreeSize()
 
 	return -1
@@ -413,9 +407,9 @@ func (c *Chunk) FindFreeNode(startIdx int, requiredSize int) int {
 // Called when FindFreeNode returns -1 to update the stale cache
 func (c *Chunk) updateMaxFreeSize() {
 	var (
-		maxIdx      = 1 << uint(c.order+1)
-		maxFreeSize = 0
-		stack       = []int{1} // Start from root
+		maxIdx           = 1 << uint(c.order+1)
+		largestAvailable = 0
+		stack            = []int{1} // Start from root
 	)
 
 	for len(stack) > 0 {
@@ -430,8 +424,8 @@ func (c *Chunk) updateMaxFreeSize() {
 
 		// If this node is free (bit is 0), it's a candidate
 		if !c.GetBit(idx) {
-			if nodeSize > maxFreeSize {
-				maxFreeSize = nodeSize
+			if nodeSize > largestAvailable {
+				largestAvailable = nodeSize
 			}
 			// Don't descend further - entire subtree is free
 			continue
@@ -448,7 +442,7 @@ func (c *Chunk) updateMaxFreeSize() {
 		}
 	}
 
-	c.maxFreeSize = maxFreeSize
+	c.largestAvailable = largestAvailable
 }
 
 // Remove deallocates a pointer within this chunk's payload
@@ -506,9 +500,9 @@ func (c *Chunk) Remove(ptr unsafe.Pointer) bool {
 	// Returns the size of the largest free block created
 	coalescedSize := c.coalesce(curr)
 
-	// Update maxFreeSize if coalesced block is larger
-	if coalescedSize > c.maxFreeSize {
-		c.maxFreeSize = coalescedSize
+	// Update largestAvailable if coalesced block is larger
+	if coalescedSize > c.largestAvailable {
+		c.largestAvailable = coalescedSize
 	}
 
 	return true
@@ -592,13 +586,13 @@ func (c *Chunk) Reset() {
 		c.data[i] = 0x00
 	}
 	// Entire chunk is free after reset
-	c.maxFreeSize = c.blockSize
+	c.largestAvailable = c.blockSize
 }
 
-// GetMaxFreeSize returns the cached maximum allocation size available in this chunk.
+// GetMaxFreeSize returns the cached largest available allocation size in this chunk.
 // The value is updated during Allocate() and Remove() operations for O(1) lookup.
 func (c *Chunk) GetMaxFreeSize() int {
-	return c.maxFreeSize
+	return c.largestAvailable
 }
 
 // ============================================================================
@@ -617,12 +611,12 @@ const (
 // ============================================================================
 
 type BuddyAllocator struct {
-	chunks         []*Chunk
-	lastChunkIdx   int      // Index of last successfully allocated chunk
-	res            *res.Res // Used when USE_RES = true
-	growthStrategy Growth   // Strategy for chunk growth
-	chunkSize      int      // Custom chunk size (must be multiple of MIN_CHUNK_SIZE)
-	mtx            sync.Mutex
+	mtx    sync.Mutex // Cache line alignment: mutex first to avoid false sharing
+	chunks []*Chunk   // Hot: accessed in every Alloc/Remove
+	lindex int        // Hot: cached chunk index for locality
+	growth Growth     // Warm: allocation strategy
+	size   int        // Warm: chunk sizing
+	res    *res.Res   // Cold: only used during initialization
 }
 
 // BuddyAllocatorOption is a functional option for configuring BuddyAllocator
@@ -631,7 +625,7 @@ type BuddyAllocatorOption func(*BuddyAllocator)
 // WithGrowthStrategy sets the growth strategy for the allocator
 func WithGrowthStrategy(strategy Growth) BuddyAllocatorOption {
 	return func(a *BuddyAllocator) {
-		a.growthStrategy = strategy
+		a.growth = strategy
 	}
 }
 
@@ -650,7 +644,7 @@ func WithSize(size int) BuddyAllocatorOption {
 			dataSize = size
 			bitmapSize = (dataSize / MIN_DATA_SIZE) * MIN_BITMAP_SIZE
 		}
-		a.chunkSize = dataSize + bitmapSize
+		a.size = dataSize + bitmapSize
 	}
 }
 
@@ -673,8 +667,8 @@ func (a *BuddyAllocator) Alloc(size, align uint64) unsafe.Pointer {
 	blockSize := max(max(res.RoundPow2(size), align), MIN_BLOCK_SIZE)
 
 	// Try last chunk first (cache locality)
-	if a.lastChunkIdx >= 0 && a.lastChunkIdx < len(a.chunks) {
-		chunk := a.chunks[a.lastChunkIdx]
+	if a.lindex >= 0 && a.lindex < len(a.chunks) {
+		chunk := a.chunks[a.lindex]
 		if chunk.GetMaxFreeSize() >= int(size) {
 			if blockPtr := chunk.Allocate(int(size)); blockPtr != nil {
 				return blockPtr
@@ -702,28 +696,28 @@ func (a *BuddyAllocator) Alloc(size, align uint64) unsafe.Pointer {
 
 	if bestIdx >= 0 {
 		if blockPtr := a.chunks[bestIdx].Allocate(int(size)); blockPtr != nil {
-			a.lastChunkIdx = bestIdx
+			a.lindex = bestIdx
 			return blockPtr
 		}
 	}
 
 	// If FIXED strategy and we have at least 1 chunk, don't grow
-	if a.growthStrategy == FIXED {
+	if a.growth == FIXED {
 		if len(a.chunks) >= 1 {
 			return nil
 		}
 	}
 
 	// ADDITIVE always grows, FIXED grows only when chunks == 0
-	if a.growthStrategy == ADDITIVE || a.growthStrategy == FIXED {
+	if a.growth == ADDITIVE || a.growth == FIXED {
 		var (
-			growSize  = max(max(int(res.RoundPow2(size*2)), int(blockSize)), a.chunkSize)
+			growSize  = max(max(int(res.RoundPow2(size*2)), int(blockSize)), a.size)
 			chunk     = NewChunk(a.res, growSize)
 			insertIdx = 0
 		)
-		if growSize > a.chunkSize {
-			if rem := growSize % a.chunkSize; rem != 0 {
-				growSize = growSize + a.chunkSize - rem
+		if growSize > a.size {
+			if rem := growSize % a.size; rem != 0 {
+				growSize = growSize + a.size - rem
 			}
 		}
 
@@ -734,7 +728,7 @@ func (a *BuddyAllocator) Alloc(size, align uint64) unsafe.Pointer {
 
 		// Insert at position insertIdx
 		a.chunks = append(a.chunks[:insertIdx], append([]*Chunk{chunk}, a.chunks[insertIdx:]...)...)
-		a.lastChunkIdx = insertIdx
+		a.lindex = insertIdx
 
 		return chunk.Allocate(int(size))
 	}
@@ -793,7 +787,7 @@ func (a *BuddyAllocator) Reset() {
 	for _, chunk := range a.chunks {
 		chunk.Reset()
 	}
-	a.lastChunkIdx = -1
+	a.lindex = -1
 }
 
 func (a *BuddyAllocator) Delete() {
@@ -801,7 +795,7 @@ func (a *BuddyAllocator) Delete() {
 	defer a.mtx.Unlock()
 	if a.chunks != nil {
 		a.chunks = nil
-		a.lastChunkIdx = -1
+		a.lindex = -1
 		if a.res != nil {
 			a.res.Delete()
 			a.res = nil
@@ -868,13 +862,13 @@ func NewChunk(r *res.Res, size int) *Chunk {
 
 	startAddress := uintptr(unsafe.Pointer(unsafe.SliceData(data)))
 	chunk := &Chunk{
-		data:         data,
-		startAddress: startAddress,
-		endAddress:   startAddress + uintptr(len(data)),
-		blockSize:    dataSize,
-		order:        order,
-		bitsSize:     bitsSize,
-		maxFreeSize:  dataSize, // entire chunk is initially free
+		data:             data,
+		startAddress:     startAddress,
+		endAddress:       startAddress + uintptr(len(data)),
+		blockSize:        dataSize,
+		order:            order,
+		bitsSize:         bitsSize,
+		largestAvailable: dataSize, // entire chunk is initially free
 	}
 
 	// Reset to ensure all bits are properly initialized to free state
@@ -886,10 +880,10 @@ func NewBuddyAllocator(opts ...BuddyAllocatorOption) *BuddyAllocator {
 	// Initialize allocator without pre-allocating chunks
 	// First Alloc() call will size the chunk appropriately based on the allocation size
 	a := &BuddyAllocator{
-		chunks:         []*Chunk{},
-		growthStrategy: ADDITIVE,       // default strategy
-		chunkSize:      MIN_CHUNK_SIZE, // default chunk size
-		lastChunkIdx:   -1,
+		chunks: []*Chunk{},
+		growth: ADDITIVE,       // default strategy
+		size:   MIN_CHUNK_SIZE, // default chunk size
+		lindex: -1,
 	}
 
 	// Apply functional options first (to allow customizing chunkSize)
@@ -899,7 +893,7 @@ func NewBuddyAllocator(opts ...BuddyAllocatorOption) *BuddyAllocator {
 
 	// Initialize Res after options are applied, using the configured chunkSize
 	if USE_RES {
-		a.res = res.NewRes(a.chunkSize)
+		a.res = res.NewRes(a.size)
 	}
 
 	return a
