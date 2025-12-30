@@ -237,6 +237,7 @@ func (c *Chunk) UpdateNode(idx int) {
 //   - Splitting: O(log N) recursive splits
 //   - Total: O(log N) amortized
 func (c *Chunk) Allocate(size int) unsafe.Pointer {
+
 	if size <= 0 || size > c.blockSize {
 		return nil
 	}
@@ -245,7 +246,7 @@ func (c *Chunk) Allocate(size int) unsafe.Pointer {
 		return nil
 	}
 
-	var requiredSize = max(size, MIN_BLOCK_SIZE)
+	var requiredSize = int(res.RoundPow2(uint64(max(size, MIN_BLOCK_SIZE))))
 
 	// Find a free node at the appropriate size or larger
 	idx := c.FindFreeNode(1, requiredSize)
@@ -383,14 +384,18 @@ func (c *Chunk) FindFreeNode(startIdx int, requiredSize int) int {
 			continue
 		}
 
-		// If it's larger than requiredSize, descend to find a free sub-block.
-		// We descend regardless of the current node's allocation state because:
-		// - If the node is free, children will be processed
-		// - If the node is allocated, we explore children for potential free blocks
-		left := (2 * idx) + 0
-		right := (2 * idx) + 1
+		// If it's larger than requiredSize, check if we should descend.
+		var (
+			left  = (2 * idx) + 0
+			right = (2 * idx) + 1
+		)
 		if right < maxIdx {
-			// Always descend to check children for free blocks
+			// Check if this is a whole-allocated block (bit=1 and both children free).
+			// If yes, skip descending as there are no free sub-blocks.
+			if !c.GetBit(left) && !c.GetBit(right) {
+				continue
+			}
+			// Partial: descend to check children for free blocks
 			stack = append(stack, right)
 			stack = append(stack, left)
 		}
@@ -431,12 +436,18 @@ func (c *Chunk) updateMaxFreeSize() {
 			continue
 		}
 
-		// If allocated, check children for free blocks
+		// If allocated, check if we should descend
 		var (
 			left  = (2 * idx) + 0
 			right = (2 * idx) + 1
 		)
 		if right < maxIdx {
+			// Check if this is a whole-allocated block (bit=1 and both children free).
+			// If yes, skip descending as there are no free sub-blocks.
+			if !c.GetBit(left) && !c.GetBit(right) {
+				continue
+			}
+			// Partial: descend
 			stack = append(stack, right)
 			stack = append(stack, left)
 		}
