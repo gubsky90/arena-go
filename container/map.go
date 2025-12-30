@@ -31,6 +31,7 @@ type entry[K comparable, V any] struct {
 	key  K
 	val  V
 	next *entry[K, V]
+	// Note: Cache alignment is automatic here due to alignment of K and V types
 }
 
 // NewMap creates a new Map with separate chaining for collision resolution

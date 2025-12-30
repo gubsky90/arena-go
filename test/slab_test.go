@@ -13,122 +13,8 @@ import (
 	"github.com/thebagchi/arena-go/res"
 )
 
-func TestBuddy_ReallocOrder(t *testing.T) {
-	a := arena.New(alloc.NewBuddyAllocator())
-	defer a.Delete()
-
-	const count = 128
-	// First allocation
-	ptrs := make([]*int64, count)
-	for i := range count {
-		ptrs[i] = arena.Alloc[int64](a)
-		if ptrs[i] == nil {
-			t.Fatalf("first allocation %d failed", i)
-		}
-		*ptrs[i] = int64(i)
-	}
-
-	// Delete all pointers
-	for _, ptr := range ptrs {
-		arena.DeleteObject(a, ptr)
-	}
-
-	// Second allocation and verify in one loop
-	for i := range count {
-		ptr := arena.Alloc[int64](a)
-		if ptr == nil {
-			t.Fatalf("second allocation %d failed", i)
-		}
-		*ptr = int64(i + 1000) // Different value to distinguish
-
-		// Verify address matches first allocation
-		addr := uintptr(unsafe.Pointer(ptr))
-		if addr != uintptr(unsafe.Pointer(ptrs[i])) {
-			temp := uintptr(unsafe.Pointer(ptrs[i]))
-			t.Errorf("allocation order mismatch at index %d: expected addr %#x, got %#x", i, temp, addr)
-		}
-		if *ptr != int64(i+1000) {
-			t.Errorf("value mismatch at index %d: expected %d, got %d", i, i+1000, *ptr)
-		}
-	}
-
-	t.Logf("Successfully verified reallocation order for %d int64 values", count)
-}
-
-func TestBuddy_FragmentationRecovery(t *testing.T) {
-	a := arena.New(alloc.NewBuddyAllocator())
-	defer a.Delete()
-
-	const count = 256
-	// First allocation of 256 pointers
-	ptrs := make([]*int64, count)
-	for i := range count {
-		ptrs[i] = arena.Alloc[int64](a)
-		if ptrs[i] == nil {
-			t.Fatalf("allocation %d failed", i)
-		}
-		*ptrs[i] = int64(i)
-	}
-
-	// Free even pointers
-	for i := range count {
-		if i%2 == 0 {
-			arena.DeleteObject(a, ptrs[i])
-		}
-	}
-
-	// Allocate 128 new pointers
-	for i := range 128 {
-		ptr := arena.Alloc[int64](a)
-		if ptr == nil {
-			t.Fatalf("second allocation %d failed", i)
-		}
-		*ptr = int64(i + 2000)
-
-		// Verify address matches the freed even pointer
-		addr := uintptr(unsafe.Pointer(ptr))
-		if addr != uintptr(unsafe.Pointer(ptrs[i*2])) {
-			temp := uintptr(unsafe.Pointer(ptrs[i*2]))
-			t.Errorf("allocation order mismatch at index %d: expected addr %#x, got %#x", i, temp, addr)
-		}
-		if *ptr != int64(i+2000) {
-			t.Errorf("value mismatch at index %d: expected %d, got %d", i, i+2000, *ptr)
-		}
-	}
-
-	t.Logf("Successfully verified allocation order after freeing even pointers")
-
-	// Free odd pointers
-	for i := range count {
-		if i%2 == 1 {
-			arena.DeleteObject(a, ptrs[i])
-		}
-	}
-
-	// Allocate 128 more pointers
-	for i := range 128 {
-		ptr := arena.Alloc[int64](a)
-		if ptr == nil {
-			t.Fatalf("third allocation %d failed", i)
-		}
-		*ptr = int64(i + 3000)
-
-		// Verify address matches the freed odd pointer
-		addr := uintptr(unsafe.Pointer(ptr))
-		if addr != uintptr(unsafe.Pointer(ptrs[i*2+1])) {
-			temp := uintptr(unsafe.Pointer(ptrs[i*2+1]))
-			t.Errorf("allocation order mismatch at index %d: expected addr %#x, got %#x", i, temp, addr)
-		}
-		if *ptr != int64(i+3000) {
-			t.Errorf("value mismatch at index %d: expected %d, got %d", i, i+3000, *ptr)
-		}
-	}
-
-	t.Logf("Successfully verified allocation order after freeing odd pointers")
-}
-
-func TestBuddy_100KInt64(t *testing.T) {
-	a := arena.New(alloc.NewBuddyAllocator())
+func TestSlab_100KInt64(t *testing.T) {
+	a := arena.New(alloc.NewSlabAllocator())
 	defer a.Delete()
 
 	const count = 100_000
@@ -171,12 +57,8 @@ func TestBuddy_100KInt64(t *testing.T) {
 	t.Logf("Successfully allocated and verified %d int64 values", count)
 }
 
-func TestBuddy_1MInt64(t *testing.T) {
-	//t.Skip("Skipping 1M test in buddy")
-	a := arena.New(alloc.NewBuddyAllocator(
-		alloc.WithGrowthStrategy(alloc.FIXED),
-		alloc.WithSize(1_000_000*16),
-	))
+func TestSlab_1MInt64(t *testing.T) {
+	a := arena.New(alloc.NewSlabAllocator())
 	defer a.Delete()
 
 	const count = 1_000_000
@@ -214,46 +96,8 @@ func TestBuddy_1MInt64(t *testing.T) {
 	t.Logf("Successfully allocated and verified %d int64 values", count)
 }
 
-func TestBuddy_100KStrings(t *testing.T) {
-	a := arena.New(alloc.NewBuddyAllocator())
-	defer a.Delete()
-
-	const count = 100_000
-	strs := make([]string, count)
-
-	for i := range count {
-		s := fmt.Sprintf("string value %d", i)
-		strs[i] = a.MakeString(s)
-		if strs[i] != s {
-			t.Fatalf("string %d mismatch: expected %q, got %q", i, s, strs[i])
-		}
-	}
-
-	pageCounts := make(map[uintptr]int)
-	for i := range count {
-		s := fmt.Sprintf("string value %d", i)
-		if strs[i] != s {
-			t.Errorf("string %d verification failed: expected %q, got %q", i, s, strs[i])
-		}
-		// Get address of string data
-		if len(strs[i]) > 0 {
-			addr := (*[2]uintptr)(unsafe.Pointer(&strs[i]))[1]
-			page := addr / uintptr(res.PAGE_SIZE)
-			pageCounts[page]++
-		}
-	}
-
-	// Log page usage
-	for page, count := range pageCounts {
-		pageAddr := page * uintptr(res.PAGE_SIZE)
-		t.Logf("Page %#x: %d allocations", pageAddr, count)
-	}
-
-	t.Logf("Successfully allocated and verified %d strings", count)
-}
-
-func TestBuddy_100KInt32(t *testing.T) {
-	a := arena.New(alloc.NewBuddyAllocator())
+func TestSlab_100KInt32(t *testing.T) {
+	a := arena.New(alloc.NewSlabAllocator())
 	defer a.Delete()
 
 	const count = 100_000
@@ -282,8 +126,8 @@ func TestBuddy_100KInt32(t *testing.T) {
 	t.Logf("Successfully allocated and verified %d int32 values", count)
 }
 
-func TestBuddy_100KInt16(t *testing.T) {
-	a := arena.New(alloc.NewBuddyAllocator())
+func TestSlab_100KInt16(t *testing.T) {
+	a := arena.New(alloc.NewSlabAllocator())
 	defer a.Delete()
 
 	const count = 100_000
@@ -312,8 +156,8 @@ func TestBuddy_100KInt16(t *testing.T) {
 	t.Logf("Successfully allocated and verified %d int16 values", count)
 }
 
-func TestBuddy_100KInt8(t *testing.T) {
-	a := arena.New(alloc.NewBuddyAllocator())
+func TestSlab_100KInt8(t *testing.T) {
+	a := arena.New(alloc.NewSlabAllocator())
 	defer a.Delete()
 
 	const count = 100_000
@@ -342,8 +186,8 @@ func TestBuddy_100KInt8(t *testing.T) {
 	t.Logf("Successfully allocated and verified %d int8 values", count)
 }
 
-func TestBuddy_100KEmpty(t *testing.T) {
-	a := arena.New(alloc.NewBuddyAllocator())
+func TestSlab_100KEmpty(t *testing.T) {
+	a := arena.New(alloc.NewSlabAllocator())
 	defer a.Delete()
 
 	type Empty struct{}
@@ -367,8 +211,8 @@ func TestBuddy_100KEmpty(t *testing.T) {
 	t.Logf("Successfully allocated and verified %d zero-sized values", count)
 }
 
-func TestBuddy_100KByte100(t *testing.T) {
-	a := arena.New(alloc.NewBuddyAllocator())
+func TestSlab_100KByte100(t *testing.T) {
+	a := arena.New(alloc.NewSlabAllocator())
 	defer a.Delete()
 
 	const count = 100_000
@@ -399,8 +243,8 @@ func TestBuddy_100KByte100(t *testing.T) {
 	t.Logf("Successfully allocated and verified %d [100]byte values", count)
 }
 
-func TestBuddy_100KFloat32(t *testing.T) {
-	a := arena.New(alloc.NewBuddyAllocator())
+func TestSlab_100KFloat32(t *testing.T) {
+	a := arena.New(alloc.NewSlabAllocator())
 	defer a.Delete()
 
 	const count = 100_000
@@ -430,8 +274,8 @@ func TestBuddy_100KFloat32(t *testing.T) {
 	t.Logf("Successfully allocated and verified %d float32 values", count)
 }
 
-func TestBuddy_100KFloat64(t *testing.T) {
-	a := arena.New(alloc.NewBuddyAllocator())
+func TestSlab_100KFloat64(t *testing.T) {
+	a := arena.New(alloc.NewSlabAllocator())
 	defer a.Delete()
 
 	const count = 100_000
@@ -461,8 +305,8 @@ func TestBuddy_100KFloat64(t *testing.T) {
 	t.Logf("Successfully allocated and verified %d float64 values", count)
 }
 
-func TestBuddy_100KBool(t *testing.T) {
-	a := arena.New(alloc.NewBuddyAllocator())
+func TestSlab_100KBool(t *testing.T) {
+	a := arena.New(alloc.NewSlabAllocator())
 	defer a.Delete()
 
 	const count = 100_000
@@ -492,7 +336,7 @@ func TestBuddy_100KBool(t *testing.T) {
 	t.Logf("Successfully allocated and verified %d bool values", count)
 }
 
-func TestBuddy_100KTestStruct(t *testing.T) {
+func TestSlab_100KTestStruct(t *testing.T) {
 	type Struct struct {
 		f1 int8
 		f2 int16
@@ -503,7 +347,7 @@ func TestBuddy_100KTestStruct(t *testing.T) {
 		f7 float64
 	}
 
-	a := arena.New(alloc.NewBuddyAllocator())
+	a := arena.New(alloc.NewSlabAllocator())
 	defer a.Delete()
 
 	const count = 100_000
@@ -550,8 +394,46 @@ func TestBuddy_100KTestStruct(t *testing.T) {
 	t.Logf("Successfully allocated and verified %d TestStruct values", count)
 }
 
-func TestBuddy_100KTypesAlignment(t *testing.T) {
-	a := arena.New(alloc.NewBuddyAllocator())
+func TestSlab_100KStrings(t *testing.T) {
+	a := arena.New(alloc.NewSlabAllocator())
+	defer a.Delete()
+
+	const count = 100_000
+	strs := make([]string, count)
+
+	for i := range count {
+		s := fmt.Sprintf("string value %d", i)
+		strs[i] = a.MakeString(s)
+		if strs[i] != s {
+			t.Fatalf("string %d mismatch: expected %q, got %q", i, s, strs[i])
+		}
+	}
+
+	pageCounts := make(map[uintptr]int)
+	for i := range count {
+		s := fmt.Sprintf("string value %d", i)
+		if strs[i] != s {
+			t.Errorf("string %d verification failed: expected %q, got %q", i, s, strs[i])
+		}
+		// Get address of string data
+		if len(strs[i]) > 0 {
+			addr := (*[2]uintptr)(unsafe.Pointer(&strs[i]))[1]
+			page := addr / uintptr(res.PAGE_SIZE)
+			pageCounts[page]++
+		}
+	}
+
+	// Log page usage
+	for page, count := range pageCounts {
+		pageAddr := page * uintptr(res.PAGE_SIZE)
+		t.Logf("Page %#x: %d allocations", pageAddr, count)
+	}
+
+	t.Logf("Successfully allocated and verified %d strings", count)
+}
+
+func TestSlab_100KTypesAlignment(t *testing.T) {
+	a := arena.New(alloc.NewSlabAllocator())
 	defer a.Delete()
 
 	const count = 100_000
@@ -582,8 +464,8 @@ func TestBuddy_100KTypesAlignment(t *testing.T) {
 	t.Logf("Successfully verified alignment for %d allocations of various types", count)
 }
 
-func TestBuddy_100KArray1000TypesAlignment(t *testing.T) {
-	a := arena.New(alloc.NewBuddyAllocator())
+func TestSlab_100KArray1000TypesAlignment(t *testing.T) {
+	a := arena.New(alloc.NewSlabAllocator())
 	defer a.Delete()
 
 	const count = 100_000
@@ -614,8 +496,8 @@ func TestBuddy_100KArray1000TypesAlignment(t *testing.T) {
 	t.Logf("Successfully verified alignment for %d allocations of various array types", count)
 }
 
-func TestBuddy_AppendSlice(t *testing.T) {
-	a := arena.New(alloc.NewBuddyAllocator())
+func TestSlab_AppendSlice(t *testing.T) {
+	a := arena.New(alloc.NewSlabAllocator())
 	defer a.Delete()
 
 	slice := arena.MakeSlice[int](a, 0, 10)
@@ -636,8 +518,8 @@ func TestBuddy_AppendSlice(t *testing.T) {
 	t.Logf("Successfully verified Append for slice")
 }
 
-func TestBuddy_RandomTypesLambda(t *testing.T) {
-	a := arena.New(alloc.NewBuddyAllocator())
+func TestSlab_RandomTypesLambda(t *testing.T) {
+	a := arena.New(alloc.NewSlabAllocator())
 	defer a.Delete()
 
 	const iterations = 100_000
@@ -731,8 +613,8 @@ func TestBuddy_RandomTypesLambda(t *testing.T) {
 	t.Logf("Successfully allocated and verified alignment for %d iterations of random type allocations", iterations)
 }
 
-func TestBuddy_ExpandCases(t *testing.T) {
-	a := arena.New(alloc.NewBuddyAllocator())
+func TestSlab_ExpandCases(t *testing.T) {
+	a := arena.New(alloc.NewSlabAllocator())
 	defer a.Delete()
 
 	t.Run("EXPANDCASE1_SINGLEELEMENTNOGROWTH", func(t *testing.T) {
@@ -854,8 +736,8 @@ func TestBuddy_ExpandCases(t *testing.T) {
 	})
 }
 
-func TestBuddy_StressTest(t *testing.T) {
-	a := arena.New(alloc.NewBuddyAllocator())
+func TestSlab_StressTest(t *testing.T) {
+	a := arena.New(alloc.NewSlabAllocator())
 	defer a.Delete()
 
 	const totalIterations = 1_000_000
@@ -915,7 +797,7 @@ func TestBuddy_StressTest(t *testing.T) {
 	t.Logf("Stress test completed: %d iterations with periodic resets", totalIterations)
 }
 
-func TestBuddy_ConcurrentAllocations(t *testing.T) {
+func TestSlab_ConcurrentAllocations(t *testing.T) {
 	const numGoroutines = 10
 	const allocationsPerGoroutine = 1000
 
@@ -926,7 +808,7 @@ func TestBuddy_ConcurrentAllocations(t *testing.T) {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
-			a := arena.New(alloc.NewBuddyAllocator())
+			a := arena.New(alloc.NewSlabAllocator())
 			defer a.Delete()
 
 			// Allocate and verify various types
@@ -1021,8 +903,8 @@ func TestBuddy_ConcurrentAllocations(t *testing.T) {
 	t.Logf("Concurrent allocations completed successfully: %d goroutines, %d allocations each", numGoroutines, allocationsPerGoroutine)
 }
 
-func TestBuddy_InvalidInputs(t *testing.T) {
-	a := arena.New(alloc.NewBuddyAllocator())
+func TestSlab_InvalidInputs(t *testing.T) {
+	a := arena.New(alloc.NewSlabAllocator())
 	defer a.Delete()
 
 	t.Run("MAKESLICE_NEGATIVELEN", func(t *testing.T) {
@@ -1065,17 +947,17 @@ func TestBuddy_InvalidInputs(t *testing.T) {
 	})
 
 	t.Run("RESET_AFTERDELETE", func(t *testing.T) {
-		a2 := arena.New(alloc.NewBuddyAllocator())
+		a2 := arena.New(alloc.NewSlabAllocator())
 		a2.Delete()
 		a2.Reset()
 	})
 
 	t.Run("ALLOC_AFTERDELETE", func(t *testing.T) {
-		a3 := arena.New(alloc.NewBuddyAllocator())
+		a3 := arena.New(alloc.NewSlabAllocator())
 		a3.Delete()
 		defer func() {
 			if r := recover(); r == nil {
-				t.Error("Expected panic when allocating after delete")
+				t.Error("Expected panic for allocation after delete")
 			}
 		}()
 		arena.Alloc[int](a3)
@@ -1084,8 +966,8 @@ func TestBuddy_InvalidInputs(t *testing.T) {
 	t.Logf("Invalid input tests completed")
 }
 
-func TestBuddy_Vec_NativeTypes(t *testing.T) {
-	a := arena.New(alloc.NewBuddyAllocator())
+func TestSlab_Vec_NativeTypes(t *testing.T) {
+	a := arena.New(alloc.NewSlabAllocator())
 	defer a.Delete()
 
 	// Test Vec with int
@@ -1175,7 +1057,7 @@ func TestBuddy_Vec_NativeTypes(t *testing.T) {
 	// 100K string
 	vecStringLarge := container.NewVec[string](a)
 	for i := range count {
-		vecStringLarge.AppendOne(a.MakeString(fmt.Sprintf("item%d", i)))
+		vecStringLarge.AppendOne(fmt.Sprintf("item%d", i))
 	}
 	if vecStringLarge.Len() != count {
 		t.Errorf("Vec[string] 100K length: expected %d, got %d", count, vecStringLarge.Len())
@@ -1199,7 +1081,7 @@ func TestBuddy_Vec_NativeTypes(t *testing.T) {
 	// 100K byte
 	vecByteLarge := container.NewVec[byte](a)
 	for i := range count {
-		vecByteLarge.AppendOne(byte(i % 256))
+		vecByteLarge.AppendOne(byte((i % 256)))
 	}
 	if vecByteLarge.Len() != count {
 		t.Errorf("Vec[byte] 100K length: expected %d, got %d", count, vecByteLarge.Len())
@@ -1208,5 +1090,83 @@ func TestBuddy_Vec_NativeTypes(t *testing.T) {
 		t.Errorf("Vec[byte] 100K first/last incorrect: first=%d, last=%d", vecByteLarge.Slice()[0], vecByteLarge.Slice()[count-1])
 	}
 
-	t.Logf("Vec tests with native types completed successfully")
+	t.Logf("Vec native types test completed successfully")
+}
+
+func TestSlab_AllocationsAfterReset(t *testing.T) {
+	a := arena.New(alloc.NewSlabAllocator())
+	defer a.Delete()
+
+	const count = 10_000
+
+	// First allocation batch
+	ptrs1 := make([]*int64, count)
+	for i := range count {
+		ptrs1[i] = arena.Alloc[int64](a)
+		if ptrs1[i] == nil {
+			t.Fatalf("first allocation batch %d failed", i)
+		}
+		*ptrs1[i] = int64(i)
+	}
+
+	// Verify first batch
+	for i := range count {
+		if *ptrs1[i] != int64(i) {
+			t.Errorf("first batch index %d: expected %d, got %d", i, i, *ptrs1[i])
+		}
+	}
+
+	// Reset the arena
+	a.Reset()
+
+	// Second allocation batch after reset
+	ptrs2 := make([]*int64, count)
+	for i := range count {
+		ptrs2[i] = arena.Alloc[int64](a)
+		if ptrs2[i] == nil {
+			t.Fatalf("second allocation batch %d failed after reset", i)
+		}
+		*ptrs2[i] = int64(i * 2)
+	}
+
+	// Verify second batch
+	for i := range count {
+		if *ptrs2[i] != int64(i*2) {
+			t.Errorf("second batch index %d: expected %d, got %d", i, i*2, *ptrs2[i])
+		}
+	}
+
+	// Test with different types after reset
+	a.Reset()
+
+	const count2 = 5000
+
+	// Float64 allocations
+	floatPtrs := make([]*float64, count2)
+	for i := range count2 {
+		floatPtrs[i] = arena.Alloc[float64](a)
+		if floatPtrs[i] == nil {
+			t.Fatalf("float64 allocation %d failed after reset", i)
+		}
+		*floatPtrs[i] = float64(i) + 0.5
+	}
+
+	// String allocations
+	strs := make([]string, count2)
+	for i := range count2 {
+		strs[i] = a.MakeString(fmt.Sprintf("reset_test_%d", i))
+	}
+
+	// Verify float64 and string allocations
+	for i := range count2 {
+		if *floatPtrs[i] != float64(i)+0.5 {
+			t.Errorf("float64 index %d: expected %f, got %f", i, float64(i)+0.5, *floatPtrs[i])
+		}
+		expected := fmt.Sprintf("reset_test_%d", i)
+		if strs[i] != expected {
+			t.Errorf("string index %d: expected %q, got %q", i, expected, strs[i])
+		}
+	}
+
+	t.Logf("Successfully verified allocations after Reset")
 }

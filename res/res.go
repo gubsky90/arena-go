@@ -28,10 +28,10 @@ func NewPage(size int) *Page {
 }
 
 type Res struct {
+	mtx     sync.Mutex
 	chunks  []*Page
 	current int
 	offset  int
-	mtx     sync.Mutex
 }
 
 func NewRes(size int) *Res {

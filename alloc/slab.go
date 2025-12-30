@@ -2,7 +2,6 @@
 package alloc
 
 import (
-	"math/bits"
 	"sync"
 	"unsafe"
 
@@ -10,28 +9,34 @@ import (
 )
 
 const (
-	NUM_CLASSES = 17
+	NUM_CLASSES = 32
 )
 
 var SIZE_CLASSES = [NUM_CLASSES]uint64{
-	16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384,
-	32768, 65536, 131072, 262144, 524288, 1048576,
+	16, 32, 64, 128,
+	256, 512, 1024, 2048,
+	4096, 8192, 16384, 32768,
+	65536, 131072, 262144, 524288,
+	1048576, 2097152, 4194304, 8388608,
+	16777216, 33554432, 67108864, 134217728,
+	268435456, 536870912, 1073741824, 2147483648,
+	4294967296, 8589934592, 17179869184, 34359738368,
 }
 
 type SlabAllocator struct {
+	mtx       sync.Mutex
 	res       *res.Res
 	bins      [NUM_CLASSES]*Bin
 	freePages []*res.Page
-	mtx       sync.Mutex
 }
 
 // Bin manages slabs for a single object size class
 type Bin struct {
+	mtx       sync.Mutex
 	size      uint64
 	align     uint64
 	exhausted []*Slab
 	available []*Slab // multiple available slabs (LIFO)
-	mtx       sync.Mutex
 }
 
 type Slab struct {
@@ -77,10 +82,15 @@ func (a *SlabAllocator) findSizeClass(size, align uint64) uint64 {
 }
 
 func indexForSize(classSize uint64) int {
-	if classSize <= SIZE_CLASSES[0] {
-		return 0
+	// Explicitly search for the size class instead of calculating the index
+	// This ensures we only return valid indices for sizes actually in SIZE_CLASSES
+	for i, s := range SIZE_CLASSES {
+		if s == classSize {
+			return i
+		}
 	}
-	return bits.TrailingZeros64(classSize) - 4
+	// If size not found in SIZE_CLASSES, return NUM_CLASSES to indicate direct allocation
+	return NUM_CLASSES
 }
 
 func (a *SlabAllocator) Alloc(size, align uint64) unsafe.Pointer {
@@ -97,29 +107,42 @@ func (a *SlabAllocator) Alloc(size, align uint64) unsafe.Pointer {
 
 // AllocatePage returns a page for a bin, either from the free pool or by allocating a new one
 func (a *SlabAllocator) AllocatePage(size uint64) *res.Page {
+	// Calculate the needed size with proper logic for different size ranges
+	var roundedSize int
+
+	if size <= uint64(res.PAGE_SIZE) {
+		// For small sizes: fit within one page boundary
+		// Calculate how many objects fit in one page
+		objectsPerPage := max(1, res.PAGE_SIZE/int(size))
+		chunkSize := objectsPerPage * int(size)
+		// Round up to page boundary
+		roundedSize = ((chunkSize + res.PAGE_SIZE - 1) / res.PAGE_SIZE) * res.PAGE_SIZE
+	} else {
+		// For sizes >= PAGE_SIZE: allocate in multiples of page size
+		// Round size up to nearest multiple of PAGE_SIZE
+		roundedSize = int(((size + uint64(res.PAGE_SIZE) - 1) / uint64(res.PAGE_SIZE)) * uint64(res.PAGE_SIZE))
+	}
+
 	a.mtx.Lock()
-	if len(a.freePages) > 0 {
-		page := a.freePages[len(a.freePages)-1]
-		a.freePages = a.freePages[:len(a.freePages)-1]
-		a.mtx.Unlock()
-		return page
+	// Try to find a free page that's large enough
+	for i := len(a.freePages) - 1; i >= 0; i-- {
+		page := a.freePages[i]
+		if len(page.Base()) >= roundedSize {
+			// Found a suitable page, remove from pool
+			a.freePages = append(a.freePages[:i], a.freePages[i+1:]...)
+			a.mtx.Unlock()
+			// Return reused page directly - initSlab will rebuild free list from scratch
+			// No need to zero the page (expensive and unnecessary)
+			return page
+		}
 	}
 	a.mtx.Unlock()
 
-	// Allocate new page from res
-	var (
-		minObjects  = max(64, res.PAGE_SIZE/int(size))
-		chunkSize   = minObjects * int(size)
-		roundedSize = ((chunkSize + res.PAGE_SIZE - 1) / res.PAGE_SIZE) * res.PAGE_SIZE
-	)
-
-	ptr := a.res.Alloc(uint64(roundedSize), 8)
-	if ptr == nil {
-		return nil
-	}
-
-	page, ok := a.res.FindPage(ptr)
-	if !ok {
+	// No suitable page in free pool, allocate new one
+	// Create a new page with direct mmap allocation to avoid sharing
+	// This prevents multiple slabs from interfering with each other
+	page := a.res.New(int(roundedSize))
+	if page == nil {
 		return nil
 	}
 
@@ -190,12 +213,13 @@ func (a *SlabAllocator) binAlloc(b *Bin) unsafe.Pointer {
 	// Fast path: most recent available slab
 	if len(b.available) > 0 {
 		s := b.available[len(b.available)-1]
-		ptr := a.allocFromSlab(s, b.size)
-		if ptr == nil {
-			b.available = b.available[:len(b.available)-1]
-			b.exhausted = append(b.exhausted, s)
+		ptr := a.allocFromSlab(s)
+		if ptr != nil {
+			return ptr
 		}
-		return ptr
+		// Slab exhausted, move to exhausted list and allocate new slab
+		b.available = b.available[:len(b.available)-1]
+		b.exhausted = append(b.exhausted, s)
 	}
 
 	// Try free page pool via allocator
@@ -206,7 +230,7 @@ func (a *SlabAllocator) binAlloc(b *Bin) unsafe.Pointer {
 
 	s := a.initSlab(b, page)
 	b.available = append(b.available, s)
-	return a.allocFromSlab(s, b.size)
+	return a.allocFromSlab(s)
 }
 
 func (a *SlabAllocator) initSlab(b *Bin, page *res.Page) *Slab {
@@ -231,7 +255,7 @@ func (a *SlabAllocator) initSlab(b *Bin, page *res.Page) *Slab {
 	return s
 }
 
-func (a *SlabAllocator) allocFromSlab(s *Slab, size uint64) unsafe.Pointer {
+func (a *SlabAllocator) allocFromSlab(s *Slab) unsafe.Pointer {
 	if s.freed == nil {
 		return nil
 	}
@@ -260,9 +284,7 @@ func (a *SlabAllocator) binFree(b *Bin, ptr unsafe.Pointer) {
 		a.removeFromSlice(&b.available, s)
 		a.removeFromSlice(&b.exhausted, s)
 
-		a.mtx.Lock()
 		a.freePages = append(a.freePages, s.page)
-		a.mtx.Unlock()
 	} else {
 		// Promote to available list
 		a.removeFromSlice(&b.exhausted, s)
@@ -294,14 +316,32 @@ func (a *SlabAllocator) Reset() {
 	a.mtx.Lock()
 	defer a.mtx.Unlock()
 
-	a.res.Reset()
-	a.freePages = a.freePages[:0]
-
+	// Lock all bins first to prevent concurrent access during reset
 	for _, bin := range a.bins {
 		if bin != nil {
 			bin.mtx.Lock()
-			bin.exhausted = bin.exhausted[:0]
-			bin.available = bin.available[:0]
+		}
+	}
+
+	// Now reset under lock
+	if a.res != nil {
+		a.res.Reset()
+	}
+
+	// Clear free pages pool
+	a.freePages = nil
+
+	// Clear all bin slab lists
+	for _, bin := range a.bins {
+		if bin != nil {
+			bin.exhausted = nil
+			bin.available = nil
+		}
+	}
+
+	// Unlock all bins
+	for _, bin := range a.bins {
+		if bin != nil {
 			bin.mtx.Unlock()
 		}
 	}
@@ -311,11 +351,32 @@ func (a *SlabAllocator) Delete() {
 	a.mtx.Lock()
 	defer a.mtx.Unlock()
 
+	// Lock all bins first to prevent concurrent access during delete
+	for _, bin := range a.bins {
+		if bin != nil {
+			bin.mtx.Lock()
+		}
+	}
+
+	// Delete resource manager
 	if a.res != nil {
 		a.res.Delete()
 		a.res = nil
 	}
+
+	// Clear free pages pool and bins
 	a.freePages = nil
+
+	for i := range a.bins {
+		a.bins[i] = nil
+	}
+
+	// Unlock all bins (though they won't be used after this)
+	for _, bin := range a.bins {
+		if bin != nil {
+			bin.mtx.Unlock()
+		}
+	}
 }
 
 func (a *SlabAllocator) Remove(ptr unsafe.Pointer) {

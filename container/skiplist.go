@@ -47,10 +47,10 @@ func RandomLevel() int {
 // All operations (Search, Insert, Delete, Range) are protected by RWMutex.
 // Memory is allocated entirely from the arena, avoiding GC pressure.
 type SkipList[K ordered, V any] struct {
+	lock  sync.RWMutex
 	arena *arena.Arena
 	head  *node[K, V]
 	level int
-	lock  sync.RWMutex
 }
 
 type Pair[K ordered, V any] struct {

@@ -17,10 +17,10 @@ import (
 //   - Multiple goroutines can safely allocate and free concurrently
 //   - Pool shares the Arena's lifecycle - when Arena is deleted, all Pool memory is freed
 type Pool[T any] struct {
+	mtx         sync.Mutex
 	arena       *arena.Arena
 	size        uintptr
 	allocations *Vec[*T]
-	mtx         sync.Mutex
 }
 
 // NewPool creates a new object pool for type T that allocates from the given Arena.
