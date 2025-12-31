@@ -6,7 +6,7 @@ import (
 	"github.com/thebagchi/arena-go/res"
 )
 
-func TestNewChunkSizingLogic(t *testing.T) {
+func TestChunk_NewSizingLogic(t *testing.T) {
 	const (
 		MIN_BLOCK_SIZE = 16
 		MIN_DATA_SIZE  = 256 * 1024

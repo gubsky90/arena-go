@@ -1,4 +1,4 @@
-package arena_test
+package container_test
 
 import (
 	"testing"
@@ -9,7 +9,7 @@ import (
 	"github.com/thebagchi/arena-go/res"
 )
 
-func TestToBytes(t *testing.T) {
+func TestString_ToBytes(t *testing.T) {
 	tests := []struct {
 		name string
 		s    string
@@ -36,7 +36,7 @@ func TestToBytes(t *testing.T) {
 	}
 }
 
-func TestToString(t *testing.T) {
+func TestString_ToString(t *testing.T) {
 	tests := []struct {
 		name string
 		b    []byte
@@ -56,7 +56,7 @@ func TestToString(t *testing.T) {
 	}
 }
 
-func TestTrimSpace(t *testing.T) {
+func TestString_TrimSpace(t *testing.T) {
 	a := arena.New(alloc.NewBumpAllocator(1 * 4096))
 	str := container.NewStr(a)
 	tests := []struct {
@@ -84,7 +84,7 @@ func TestTrimSpace(t *testing.T) {
 	}
 }
 
-func TestIsEmpty(t *testing.T) {
+func TestString_IsEmpty(t *testing.T) {
 	a := arena.New(alloc.NewBumpAllocator(1 * 4096))
 	str := container.NewStr(a)
 	tests := []struct {
@@ -110,7 +110,7 @@ func TestIsEmpty(t *testing.T) {
 	}
 }
 
-func TestContains(t *testing.T) {
+func TestString_Contains(t *testing.T) {
 	a := arena.New(alloc.NewBumpAllocator(1 * 4096))
 	str := container.NewStr(a)
 	tests := []struct {
@@ -136,7 +136,7 @@ func TestContains(t *testing.T) {
 	}
 }
 
-func TestHasPrefix(t *testing.T) {
+func TestString_HasPrefix(t *testing.T) {
 	a := arena.New(alloc.NewBumpAllocator(1 * 4096))
 	str := container.NewStr(a)
 	tests := []struct {
@@ -161,7 +161,7 @@ func TestHasPrefix(t *testing.T) {
 	}
 }
 
-func TestHasSuffix(t *testing.T) {
+func TestString_HasSuffix(t *testing.T) {
 	a := arena.New(alloc.NewBumpAllocator(1 * 4096))
 	str := container.NewStr(a)
 	tests := []struct {
@@ -186,7 +186,7 @@ func TestHasSuffix(t *testing.T) {
 	}
 }
 
-func TestIndex(t *testing.T) {
+func TestString_Index(t *testing.T) {
 	a := arena.New(alloc.NewBumpAllocator(1 * 4096))
 	str := container.NewStr(a)
 	tests := []struct {
@@ -212,7 +212,7 @@ func TestIndex(t *testing.T) {
 	}
 }
 
-func TestLastIndex(t *testing.T) {
+func TestString_LastIndex(t *testing.T) {
 	a := arena.New(alloc.NewBumpAllocator(1 * 4096))
 	str := container.NewStr(a)
 	tests := []struct {
@@ -237,7 +237,7 @@ func TestLastIndex(t *testing.T) {
 	}
 }
 
-func TestTrim(t *testing.T) {
+func TestString_Trim(t *testing.T) {
 	a := arena.New(alloc.NewBumpAllocator(1 * 4096))
 	str := container.NewStr(a)
 	tests := []struct {
@@ -262,7 +262,7 @@ func TestTrim(t *testing.T) {
 	}
 }
 
-func TestTrimLeft(t *testing.T) {
+func TestString_TrimLeft(t *testing.T) {
 	a := arena.New(alloc.NewBumpAllocator(1 * 4096))
 	str := container.NewStr(a)
 	tests := []struct {
@@ -285,7 +285,7 @@ func TestTrimLeft(t *testing.T) {
 	}
 }
 
-func TestTrimRight(t *testing.T) {
+func TestString_TrimRight(t *testing.T) {
 	a := arena.New(alloc.NewBumpAllocator(1 * 4096))
 	str := container.NewStr(a)
 	tests := []struct {
@@ -308,7 +308,7 @@ func TestTrimRight(t *testing.T) {
 	}
 }
 
-func TestEqualFold(t *testing.T) {
+func TestString_EqualFold(t *testing.T) {
 	a := arena.New(alloc.NewBumpAllocator(1 * 4096))
 	str := container.NewStr(a)
 	tests := []struct {
@@ -333,7 +333,7 @@ func TestEqualFold(t *testing.T) {
 	}
 }
 
-func TestCompare(t *testing.T) {
+func TestString_Compare(t *testing.T) {
 	a := arena.New(alloc.NewBumpAllocator(1 * 4096))
 	str := container.NewStr(a)
 	tests := []struct {
@@ -364,7 +364,7 @@ func TestCompare(t *testing.T) {
 	}
 }
 
-func TestToLower(t *testing.T) {
+func TestString_ToLower(t *testing.T) {
 	a := arena.New(alloc.NewBumpAllocator(1 * 4096))
 	str := container.NewStr(a)
 	tests := []struct {
@@ -387,7 +387,7 @@ func TestToLower(t *testing.T) {
 	}
 }
 
-func TestToUpper(t *testing.T) {
+func TestString_ToUpper(t *testing.T) {
 	a := arena.New(alloc.NewBumpAllocator(1 * 4096))
 	str := container.NewStr(a)
 	tests := []struct {
@@ -410,7 +410,7 @@ func TestToUpper(t *testing.T) {
 	}
 }
 
-func TestTitle(t *testing.T) {
+func TestString_Title(t *testing.T) {
 	a := arena.New(alloc.NewBumpAllocator(1 * 4096))
 	str := container.NewStr(a)
 	tests := []struct {
@@ -432,7 +432,7 @@ func TestTitle(t *testing.T) {
 	}
 }
 
-func TestSplit(t *testing.T) {
+func TestString_Split(t *testing.T) {
 	a := arena.New(alloc.NewBumpAllocator(1024 * 4096))
 	str := container.NewStr(a)
 	defer a.Delete()
@@ -465,7 +465,7 @@ func TestSplit(t *testing.T) {
 	}
 }
 
-func TestJoin(t *testing.T) {
+func TestString_Join(t *testing.T) {
 	a := arena.New(alloc.NewBumpAllocator(1024 * 4096))
 	str := container.NewStr(a)
 	defer a.Delete()
@@ -492,7 +492,7 @@ func TestJoin(t *testing.T) {
 	}
 }
 
-func TestFields(t *testing.T) {
+func TestString_Fields(t *testing.T) {
 	a := arena.New(alloc.NewBumpAllocator(1024 * 4096))
 	str := container.NewStr(a)
 	defer a.Delete()
@@ -527,7 +527,7 @@ func TestFields(t *testing.T) {
 	}
 }
 
-func TestSplitJoinRoundtrip(t *testing.T) {
+func TestString_SplitJoinRoundtrip(t *testing.T) {
 	a := arena.New(alloc.NewBumpAllocator(1024 * 4096))
 	str := container.NewStr(a)
 	defer a.Delete()
@@ -552,7 +552,7 @@ func TestSplitJoinRoundtrip(t *testing.T) {
 	}
 }
 
-func TestLines(t *testing.T) {
+func TestString_Lines(t *testing.T) {
 	a := arena.New(alloc.NewBumpAllocator(1 * 4096))
 	str := container.NewStr(a)
 	tests := []struct {
@@ -587,7 +587,7 @@ func TestLines(t *testing.T) {
 	}
 }
 
-func TestClone(t *testing.T) {
+func TestString_Clone(t *testing.T) {
 	a := arena.New(alloc.NewBumpAllocator(4096 * 4096))
 	str := container.NewStr(a)
 	defer a.Reset()
@@ -611,7 +611,7 @@ func TestClone(t *testing.T) {
 	}
 }
 
-func TestFieldsFunc(t *testing.T) {
+func TestString_FieldsFunc(t *testing.T) {
 	a := arena.New(alloc.NewBumpAllocator(4096 * 4096))
 	str := container.NewStr(a)
 	defer a.Reset()
@@ -643,7 +643,7 @@ func TestFieldsFunc(t *testing.T) {
 	}
 }
 
-func TestContainsFunc(t *testing.T) {
+func TestString_ContainsFunc(t *testing.T) {
 	a := arena.New(alloc.NewBumpAllocator(1 * 4096))
 	str := container.NewStr(a)
 	tests := []struct {
@@ -667,7 +667,7 @@ func TestContainsFunc(t *testing.T) {
 	}
 }
 
-func TestIndexFunc(t *testing.T) {
+func TestString_IndexFunc(t *testing.T) {
 	a := arena.New(alloc.NewBumpAllocator(1 * 4096))
 	str := container.NewStr(a)
 	tests := []struct {
@@ -691,7 +691,7 @@ func TestIndexFunc(t *testing.T) {
 	}
 }
 
-func TestLastIndexFunc(t *testing.T) {
+func TestString_LastIndexFunc(t *testing.T) {
 	a := arena.New(alloc.NewBumpAllocator(1 * 4096))
 	str := container.NewStr(a)
 	tests := []struct {
@@ -715,7 +715,7 @@ func TestLastIndexFunc(t *testing.T) {
 	}
 }
 
-func TestMapASCII(t *testing.T) {
+func TestString_MapASCII(t *testing.T) {
 	a := arena.New(alloc.NewBumpAllocator(1 * 4096))
 	str := container.NewStr(a)
 	tests := []struct {
@@ -749,7 +749,7 @@ func TestMapASCII(t *testing.T) {
 	}
 }
 
-func TestMapUTF8(t *testing.T) {
+func TestString_MapUTF8(t *testing.T) {
 	a := arena.New(alloc.NewBumpAllocator(1 * 4096))
 	str := container.NewStr(a)
 	tests := []struct {
@@ -783,7 +783,7 @@ func TestMapUTF8(t *testing.T) {
 	}
 }
 
-func TestMapString(t *testing.T) {
+func TestString_MapString(t *testing.T) {
 	a := arena.New(alloc.NewBumpAllocator(1 * 4096))
 	str := container.NewStr(a)
 	tests := []struct {
@@ -811,7 +811,7 @@ func TestMapString(t *testing.T) {
 	}
 }
 
-func TestToTitle(t *testing.T) {
+func TestString_ToTitle(t *testing.T) {
 	a := arena.New(alloc.NewBumpAllocator(4096 * 4096))
 	str := container.NewStr(a)
 	defer a.Reset()
@@ -835,7 +835,7 @@ func TestToTitle(t *testing.T) {
 	}
 }
 
-func TestToValidUTF8(t *testing.T) {
+func TestString_ToValidUTF8(t *testing.T) {
 	a := arena.New(alloc.NewBumpAllocator(4096 * 4096))
 	str := container.NewStr(a)
 	defer a.Reset()
@@ -860,7 +860,7 @@ func TestToValidUTF8(t *testing.T) {
 	}
 }
 
-func TestTrimFunc(t *testing.T) {
+func TestString_TrimFunc(t *testing.T) {
 	a := arena.New(alloc.NewBumpAllocator(1 * 4096))
 	str := container.NewStr(a)
 	tests := []struct {

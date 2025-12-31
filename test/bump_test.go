@@ -1467,7 +1467,7 @@ func BenchmarkBump_StructAlloc(b *testing.B) {
 	}
 }
 
-func TestBumpAllocator(t *testing.T) {
+func TestBump_Allocator(t *testing.T) {
 	a := arena.New(alloc.NewBumpAllocator(1 * 4096))
 	p1 := arena.Alloc[int](a)
 	if p1 == nil {
@@ -1487,7 +1487,7 @@ func TestBumpAllocator(t *testing.T) {
 	}
 }
 
-func TestBumpAllocatorVariousSizes(t *testing.T) {
+func TestBump_AllocatorVariousSizes(t *testing.T) {
 	a := arena.New(alloc.NewBumpAllocator(10 * 4096)) // 10 pages for larger allocations
 
 	// Test allocating different basic types
@@ -1576,7 +1576,7 @@ func TestBumpAllocatorVariousSizes(t *testing.T) {
 	}
 }
 
-func TestBumpAllocatorGrow(t *testing.T) {
+func TestBump_AllocatorGrow(t *testing.T) {
 	// Create a small arena with only 1 page (typically 4096 bytes)
 	a := arena.New(alloc.NewBumpAllocator(1 * 4096))
 

@@ -1,4 +1,4 @@
-package arena_test
+package container_test
 
 import (
 	"sync"

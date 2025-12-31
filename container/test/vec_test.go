@@ -1,4 +1,4 @@
-package arena_test
+package container_test
 
 import (
 	"reflect"
@@ -9,7 +9,7 @@ import (
 	"github.com/thebagchi/arena-go/container"
 )
 
-func TestVecBasic(t *testing.T) {
+func TestVec_Basic(t *testing.T) {
 	a := arena.New(alloc.NewBumpAllocator(1024 * 4096))
 	defer a.Delete()
 
@@ -32,7 +32,7 @@ func TestVecBasic(t *testing.T) {
 	}
 }
 
-func TestVecAppendSlice(t *testing.T) {
+func TestVec_AppendSlice(t *testing.T) {
 	a := arena.New(alloc.NewBumpAllocator(1024 * 4096))
 	defer a.Delete()
 
@@ -65,7 +65,7 @@ func TestVecAppendSlice(t *testing.T) {
 	}
 }
 
-func TestVecSSO(t *testing.T) {
+func TestVec_SSO(t *testing.T) {
 	a := arena.New(alloc.NewBumpAllocator(1024 * 4096))
 	defer a.Delete()
 
@@ -99,7 +99,7 @@ func TestVecSSO(t *testing.T) {
 	}
 }
 
-func TestVecReset(t *testing.T) {
+func TestVec_Reset(t *testing.T) {
 	a := arena.New(alloc.NewBumpAllocator(1024 * 4096))
 	defer a.Delete()
 
@@ -130,7 +130,7 @@ func TestVecReset(t *testing.T) {
 	}
 }
 
-func TestVecClone(t *testing.T) {
+func TestVec_Clone(t *testing.T) {
 	a := arena.New(alloc.NewBumpAllocator(1024 * 4096))
 
 	slice := container.NewVec[string](a)
@@ -151,7 +151,7 @@ func TestVecClone(t *testing.T) {
 	}
 }
 
-func TestVecIterators(t *testing.T) {
+func TestVec_Iterators(t *testing.T) {
 	a := arena.New(alloc.NewBumpAllocator(1024 * 4096))
 	defer a.Delete()
 
@@ -198,7 +198,7 @@ func TestVecIterators(t *testing.T) {
 	}
 }
 
-func TestVecRangeLoop(t *testing.T) {
+func TestVec_RangeLoop(t *testing.T) {
 	a := arena.New(alloc.NewBumpAllocator(1024 * 4096))
 	defer a.Delete()
 
@@ -214,7 +214,7 @@ func TestVecRangeLoop(t *testing.T) {
 	}
 }
 
-func TestVecLargeData(t *testing.T) {
+func TestVec_LargeData(t *testing.T) {
 	a := arena.New(alloc.NewBumpAllocator(100 * 1024 * 4096)) // 100KB arena
 	defer a.Delete()
 
@@ -237,7 +237,7 @@ func TestVecLargeData(t *testing.T) {
 	}
 }
 
-func TestVecGenerics(t *testing.T) {
+func TestVec_Generics(t *testing.T) {
 	a := arena.New(alloc.NewBumpAllocator(1024 * 4096))
 	defer a.Delete()
 
@@ -263,7 +263,7 @@ func TestVecGenerics(t *testing.T) {
 	}
 }
 
-func TestVecEdgeCases(t *testing.T) {
+func TestVec_EdgeCases(t *testing.T) {
 	a := arena.New(alloc.NewBumpAllocator(1024 * 4096))
 	defer a.Delete()
 
