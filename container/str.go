@@ -6,7 +6,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/thebagchi/arena-go"
+	arena "github.com/thebagchi/arena-go"
 	"github.com/thebagchi/arena-go/res"
 )
 
