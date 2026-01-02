@@ -46,6 +46,24 @@ Fastest allocator, best for batch allocations or when the arena is reset frequen
 a := arena.New(alloc.NewBumpAllocator(1024 * 4096)) // 4MB
 ```
 
+**Example use case:**
+```go
+// Perfect for processing a batch of requests
+a := arena.New(alloc.NewBumpAllocator(1024 * 1024)) // 1MB per request
+defer a.Delete()
+
+// Process request...
+users := container.NewVec[User](a)
+for _, id := range requestUserIDs {
+    user := arena.Alloc[User](a)
+    user.ID = id
+    users.Append(user)
+}
+
+// Reset for next batch
+a.Reset()
+```
+
 ### Slab Allocator
 Best for fixed-size objects with high allocation/free turnover. Features a multi-tiered design with 17 size classes (16B to 1MB), exhausted/available slab tracking, and in-object free lists for efficient memory management.
 
@@ -59,12 +77,87 @@ a := arena.New(alloc.NewSlabAllocator())
 - In-object free lists for O(1) allocation/deallocation
 - Cross-bin free page pool for efficient memory recycling
 
+**Example use case:**
+```go
+// Perfect for a long-lived server handling many connections
+a := arena.New(alloc.NewSlabAllocator())
+defer a.Delete()
+
+pool := container.NewPool[Connection](a)
+
+// Allocate on connect
+conn := pool.Alloc()
+conn.ID = nextID()
+
+// Free on disconnect (reusable for next connection)
+pool.Free(conn)
+```
+
 ### Buddy Allocator
 Most flexible, good for varied-size allocations with power-of-2 sizes.
 
 ```go
 a := arena.New(alloc.NewBuddyAllocator(1024 * 4096))
 ```
+
+**Example use case:**
+```go
+// Perfect for variable-size allocations
+a := arena.New(alloc.NewBuddyAllocator(2 * 1024 * 1024)) // 2MB
+defer a.Delete()
+
+// Allocate varied sizes
+smallVec := container.NewVec[byte](a)  // small data
+largeVec := container.NewVec[int64](a) // larger data
+map1 := container.NewMap[string, int](a)
+
+// Flexible management of different sizes
+smallVec.Append(1, 2, 3)
+largeVec.Append(100, 200, 300)
+```
+
+### Allocator Comparison
+
+#### Bump Allocator
+- **Speed:** ⚡⚡⚡ Fastest
+- **Memory Efficiency:** Good
+- **Fragmentation:** None
+- **Best For:** Batch operations, Ephemeral data
+- **Allocation Pattern:** Linear
+- **Free Strategy:** Reset whole arena
+- **Concurrency Overhead:** Very Low
+- **Memory Size:** Pre-allocated
+- **Use Case Example:** Request handlers
+- **Ideal Scenario:** Short-lived arenas
+
+#### Slab Allocator
+- **Speed:** ⚡⚡ Fast
+- **Memory Efficiency:** Excellent
+- **Fragmentation:** Minimal
+- **Best For:** Long-lived servers, Object pools
+- **Allocation Pattern:** Fixed-size classes
+- **Free Strategy:** Individual deallocation
+- **Concurrency Overhead:** Low
+- **Memory Size:** Grows as needed
+- **Use Case Example:** Connection pools
+- **Ideal Scenario:** High allocation/free turnover
+
+#### Buddy Allocator
+- **Speed:** ⚡ Moderate
+- **Memory Efficiency:** Very Good
+- **Fragmentation:** Low
+- **Best For:** Mixed allocations, Variable sizes
+- **Allocation Pattern:** Power-of-2 sizes
+- **Free Strategy:** Individual deallocation
+- **Concurrency Overhead:** Low
+- **Memory Size:** Pre-allocated
+- **Use Case Example:** General purpose
+- **Ideal Scenario:** Variable workloads
+
+**Quick Selection Guide:**
+- **Choose Bump if:** You have short-lived allocations, process batches, or frequently reset
+- **Choose Slab if:** Long-running service with frequent allocations/deallocations of similar sizes
+- **Choose Buddy if:** You need flexibility for varied-size allocations and don't want to reset often
 
 ## Core Operations
 
@@ -342,6 +435,212 @@ fmt.Println(vec.Len()) // 10
 ```
 
 ## Examples
+
+### Example 1: Processing User Requests with Bump Allocator
+
+```go
+package main
+
+import (
+    "fmt"
+    "github.com/thebagchi/arena-go"
+    "github.com/thebagchi/arena-go/alloc"
+    "github.com/thebagchi/arena-go/container"
+)
+
+type User struct {
+    ID   int
+    Name string
+}
+
+// Each request gets its own arena, reset after processing
+func processRequest(userIDs []int) {
+    a := arena.New(alloc.NewBumpAllocator(1024 * 100)) // 100KB per request
+    defer a.Delete()
+    
+    users := container.NewVec[*User](a)
+    
+    // Allocate users from the arena
+    for _, id := range userIDs {
+        user := arena.Alloc[User](a)
+        user.ID = id
+        user.Name = fmt.Sprintf("User_%d", id)
+        users.Append(user)
+    }
+    
+    fmt.Printf("Processed %d users\n", users.Len())
+    // All memory freed when a.Delete() is called
+}
+
+func main() {
+    processRequest([]int{1, 2, 3, 4, 5})
+}
+```
+
+### Example 2: Connection Pool with Slab Allocator
+
+```go
+type Connection struct {
+    ID        int
+    Buffer    *container.Str
+    Timestamp int64
+}
+
+func runServer() {
+    // Single arena for the entire server lifetime
+    a := arena.New(alloc.NewSlabAllocator())
+    defer a.Delete()
+    
+    connPool := container.NewPool[Connection](a)
+    activeConnections := container.NewMap[int, *Connection](a)
+    
+    // Handle new connection
+    onConnect := func(connID int) {
+        // Get connection from pool (reuses memory if available)
+        conn := connPool.Alloc()
+        conn.ID = connID
+        conn.Buffer = container.NewStr(a)
+        conn.Timestamp = 0
+        
+        activeConnections.Set(connID, conn)
+    }
+    
+    // Handle disconnection
+    onDisconnect := func(connID int) {
+        if conn, found := activeConnections.Get(connID); found {
+            activeConnections.Delete(connID)
+            // Memory is reused for next connection
+            connPool.Free(conn)
+        }
+    }
+    
+    // Simulate connections
+    onConnect(1)
+    onConnect(2)
+    onDisconnect(1)
+    onConnect(3) // Reuses memory from connection 1
+    
+    fmt.Printf("Active connections: %d\n", activeConnections.Len())
+}
+```
+
+### Example 3: Data Analysis with Buddy Allocator
+
+```go
+type DataPoint struct {
+    Value     float64
+    Timestamp int64
+}
+
+func analyzeData() {
+    a := arena.New(alloc.NewBuddyAllocator(2 * 1024 * 1024)) // 2MB
+    defer a.Delete()
+    
+    // Store different data types in the same arena
+    measurements := container.NewVec[float64](a)
+    metadata := container.NewMap[string, string](a)
+    timeSeries := container.NewVec[DataPoint](a)
+    
+    // Populate data
+    for i := 0; i < 1000; i++ {
+        measurements.Append(float64(i) * 3.14)
+        point := arena.Alloc[DataPoint](a)
+        point.Value = float64(i)
+        point.Timestamp = int64(i * 1000)
+        timeSeries.Append(point)
+    }
+    
+    metadata.Set("source", "sensor_1")
+    metadata.Set("location", "lab_a")
+    
+    fmt.Printf("Measurements: %d, Time Series: %d\n", 
+        measurements.Len(), timeSeries.Len())
+}
+```
+
+### Example 4: String Building with Multiple Types
+
+```go
+func buildJSON(users []map[string]interface{}) string {
+    a := arena.New(alloc.NewBumpAllocator(1024 * 10))
+    defer a.Delete()
+    
+    builder := container.NewStr(a)
+    builder.WriteString("[")
+    
+    for i, user := range users {
+        if i > 0 {
+            builder.WriteString(",")
+        }
+        builder.WriteString(`{"name":"`)
+        builder.WriteString(user["name"].(string))
+        builder.WriteString(`","age":`)
+        builder.WriteString(fmt.Sprintf("%v", user["age"]))
+        builder.WriteString("}")
+    }
+    
+    builder.WriteString("]")
+    return string(builder.Bytes())
+}
+```
+
+### Example 5: Using Clone for Heap-Independent Data
+
+```go
+func processWithSnapshot() {
+    a := arena.New(alloc.NewBumpAllocator(1024 * 4))
+    defer a.Delete()
+    
+    // Create data in arena
+    arenaSlice := arena.MakeSlice[int](a, 5, 10)
+    arenaSlice[0] = 1
+    arenaSlice[1] = 2
+    arenaSlice[2] = 3
+    
+    // Clone to heap for passing outside arena scope
+    heapSlice := arena.CloneSlice(arenaSlice[:3])
+    
+    // Now safe to use heapSlice after arena is deleted
+    return heapSlice // Safe - not owned by arena
+}
+```
+
+### Example 6: Multiple Arenas for Parallel Operations
+
+```go
+func processParallel(batches [][]int) []int {
+    results := container.NewVec[int](nil) // Use standard allocation
+    
+    var wg sync.WaitGroup
+    for _, batch := range batches {
+        wg.Add(1)
+        go func(b []int) {
+            defer wg.Done()
+            
+            // Each goroutine gets its own arena
+            a := arena.New(alloc.NewBumpAllocator(1024))
+            defer a.Delete()
+            
+            vec := container.NewVec[int](a)
+            for _, v := range b {
+                vec.Append(v * 2)
+            }
+            
+            // Sum and store result
+            sum := 0
+            vec.Range(func(v int) bool {
+                sum += v
+                return true
+            })
+            
+            results.Append(sum)
+        }(batch)
+    }
+    
+    wg.Wait()
+    return results.Slice()
+}
+```
 
 See the `example/main.go` file for more comprehensive examples covering all features.
 
