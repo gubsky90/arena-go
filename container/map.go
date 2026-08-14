@@ -44,14 +44,13 @@ func NewMap[K comparable, V any](a *arena.Arena) *Map[K, V] {
 		buckets.AppendOne(nil)
 	}
 
-	m := &Map[K, V]{
+	return arena.Ptr(a, Map[K, V]{
 		arena:   a,
 		buckets: buckets,
 		cap:     INITIAL_BUCKET_COUNT,
 		mask:    uint64(INITIAL_BUCKET_COUNT - 1),
 		seed:    maphash.MakeSeed(),
-	}
-	return m
+	})
 }
 
 // hash function using maphash for better performance and security

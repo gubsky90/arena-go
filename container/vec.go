@@ -227,7 +227,8 @@ func (s *Vec[T]) Clone() []T {
 // large.AppendOne(i)
 // }
 func NewVec[T any](a *arena.Arena, initial ...T) *Vec[T] {
-	as := &Vec[T]{arena: a}
+	as := arena.Ptr(a, Vec[T]{arena: a})
+
 	if len(initial) > 0 {
 		as.AppendSlice(initial)
 	} else {
