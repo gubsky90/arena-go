@@ -4,10 +4,10 @@ import (
 	"strings"
 	"testing"
 
-	arena "github.com/thebagchi/arena-go"
-	"github.com/thebagchi/arena-go/alloc"
-	"github.com/thebagchi/arena-go/container"
-	"github.com/thebagchi/arena-go/res"
+	arena "github.com/gubsky90/arena-go"
+	"github.com/gubsky90/arena-go/alloc"
+	"github.com/gubsky90/arena-go/container"
+	"github.com/gubsky90/arena-go/res"
 )
 
 var (

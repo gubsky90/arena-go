@@ -1,7 +1,7 @@
 package container
 
 import (
-	arena "github.com/thebagchi/arena-go"
+	arena "github.com/gubsky90/arena-go"
 )
 
 // Stack is a generic LIFO (Last In First Out) data structure.

@@ -4,8 +4,8 @@ import (
 	"testing"
 	"unsafe"
 
-	arena "github.com/thebagchi/arena-go"
-	"github.com/thebagchi/arena-go/alloc"
+	arena "github.com/gubsky90/arena-go"
+	"github.com/gubsky90/arena-go/alloc"
 )
 
 // Benchmark basic allocation performance

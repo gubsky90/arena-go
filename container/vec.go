@@ -14,8 +14,8 @@ import (
 	"iter"
 	"sort"
 
-	arena "github.com/thebagchi/arena-go"
-	"github.com/thebagchi/arena-go/res"
+	arena "github.com/gubsky90/arena-go"
+	"github.com/gubsky90/arena-go/res"
 )
 
 // Vec[T] – the ultimate appendable slice in arena memory

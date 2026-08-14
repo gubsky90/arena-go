@@ -1,7 +1,7 @@
 package container
 
 import (
-	"github.com/thebagchi/arena-go"
+	"github.com/gubsky90/arena-go"
 )
 
 // Queue is a generic FIFO (First In First Out) data structure.

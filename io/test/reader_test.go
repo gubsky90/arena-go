@@ -4,9 +4,9 @@ import (
 	"io"
 	"testing"
 
-	"github.com/thebagchi/arena-go"
-	"github.com/thebagchi/arena-go/alloc"
-	iopackage "github.com/thebagchi/arena-go/io"
+	"github.com/gubsky90/arena-go"
+	"github.com/gubsky90/arena-go/alloc"
+	iopackage "github.com/gubsky90/arena-go/io"
 )
 
 func TestReader(t *testing.T) {

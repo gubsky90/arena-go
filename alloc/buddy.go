@@ -5,7 +5,7 @@ import (
 	"sync"
 	"unsafe"
 
-	"github.com/thebagchi/arena-go/res"
+	"github.com/gubsky90/arena-go/res"
 )
 
 /*
@@ -237,7 +237,6 @@ func (c *Chunk) UpdateNode(idx int) {
 //   - Splitting: O(log N) recursive splits
 //   - Total: O(log N) amortized
 func (c *Chunk) Allocate(size int) unsafe.Pointer {
-
 	if size <= 0 || size > c.blockSize {
 		return nil
 	}
@@ -246,7 +245,7 @@ func (c *Chunk) Allocate(size int) unsafe.Pointer {
 		return nil
 	}
 
-	var requiredSize = int(res.RoundPow2(uint64(max(size, MIN_BLOCK_SIZE))))
+	requiredSize := int(res.RoundPow2(uint64(max(size, MIN_BLOCK_SIZE))))
 
 	// Find a free node at the appropriate size or larger
 	idx := c.FindFreeNode(1, requiredSize)
@@ -349,9 +348,7 @@ func (c *Chunk) split(idx int, requiredSize int) (int, int) {
 // Uses depth-first traversal with preference for left children via stack
 // Returns the index of a suitable free node, or -1 if none found
 func (c *Chunk) FindFreeNode(startIdx int, requiredSize int) int {
-	var (
-		maxIdx = 1 << uint(c.order+1)
-	)
+	maxIdx := 1 << uint(c.order+1)
 
 	// Use a stack for iterative DFS: process left children before right
 	stack := []int{startIdx}
@@ -789,6 +786,7 @@ func (a *BuddyAllocator) Remove(ptr unsafe.Pointer) {
 		chunk.Remove(ptr)
 	}
 }
+
 func (a *BuddyAllocator) Reset() {
 	a.mtx.Lock()
 	defer a.mtx.Unlock()

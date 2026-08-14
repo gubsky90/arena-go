@@ -5,7 +5,7 @@ import (
 	"sync"
 	"unsafe"
 
-	arena "github.com/thebagchi/arena-go"
+	arena "github.com/gubsky90/arena-go"
 )
 
 // Pool[T] is a high-performance, type-safe object pool that allocates from an Arena.

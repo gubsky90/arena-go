@@ -6,8 +6,8 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	arena "github.com/thebagchi/arena-go"
-	"github.com/thebagchi/arena-go/res"
+	arena "github.com/gubsky90/arena-go"
+	"github.com/gubsky90/arena-go/res"
 )
 
 // Str is a string utility struct that holds an arena reference for memory management.

@@ -4,7 +4,7 @@ import (
 	"testing"
 	"unsafe"
 
-	"github.com/thebagchi/arena-go/res"
+	"github.com/gubsky90/arena-go/res"
 )
 
 // TestResAllocChunkSwitching verifies Res allocator handles chunk switching correctly

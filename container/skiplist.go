@@ -7,7 +7,7 @@ import (
 	"sync"
 	"unsafe"
 
-	arena "github.com/thebagchi/arena-go"
+	arena "github.com/gubsky90/arena-go"
 )
 
 type signedInteger interface {

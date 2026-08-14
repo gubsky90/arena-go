@@ -3,7 +3,7 @@ package test
 import (
 	"testing"
 
-	"github.com/thebagchi/arena-go/res"
+	"github.com/gubsky90/arena-go/res"
 )
 
 func TestChunk_NewSizingLogic(t *testing.T) {

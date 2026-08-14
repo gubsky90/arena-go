@@ -13,7 +13,7 @@ A high-performance, zero-GC memory allocator library for Go with generic contain
 ## Installation
 
 ```bash
-go get github.com/thebagchi/arena-go
+go get github.com/gubsky90/arena-go
 ```
 
 ## Quick Start
@@ -24,8 +24,8 @@ go get github.com/thebagchi/arena-go
 package main
 
 import (
-    "github.com/thebagchi/arena-go"
-    "github.com/thebagchi/arena-go/alloc"
+    "github.com/gubsky90/arena-go"
+    "github.com/gubsky90/arena-go/alloc"
 )
 
 func main() {
@@ -164,7 +164,7 @@ largeVec.Append(100, 200, 300)
 ### Allocating Objects
 
 ```go
-import "github.com/thebagchi/arena-go"
+import "github.com/gubsky90/arena-go"
 
 // Allocate a single integer
 ptr := arena.Alloc[int](a)
@@ -195,7 +195,7 @@ slice[0] = 100
 ### Vec - Dynamic Array
 
 ```go
-import "github.com/thebagchi/arena-go/container"
+import "github.com/gubsky90/arena-go/container"
 
 // Create a dynamic array
 vec := container.NewVec[int](a)
@@ -330,7 +330,7 @@ bytes := str.Bytes()
 ### Writer
 
 ```go
-import arenaio "github.com/thebagchi/arena-go/io"
+import arenaio "github.com/gubsky90/arena-go/io"
 
 // Create a writer backed by arena memory
 writer := arenaio.NewWriter(a)
@@ -443,9 +443,9 @@ package main
 
 import (
     "fmt"
-    "github.com/thebagchi/arena-go"
-    "github.com/thebagchi/arena-go/alloc"
-    "github.com/thebagchi/arena-go/container"
+    "github.com/gubsky90/arena-go"
+    "github.com/gubsky90/arena-go/alloc"
+    "github.com/gubsky90/arena-go/container"
 )
 
 type User struct {

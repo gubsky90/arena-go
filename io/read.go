@@ -3,7 +3,7 @@ package io
 import (
 	"io"
 
-	arena "github.com/thebagchi/arena-go"
+	arena "github.com/gubsky90/arena-go"
 )
 
 // Reader provides a way to read bytes from a buffer

@@ -3,9 +3,9 @@ package container_test
 import (
 	"testing"
 
-	"github.com/thebagchi/arena-go"
-	"github.com/thebagchi/arena-go/alloc"
-	"github.com/thebagchi/arena-go/container"
+	"github.com/gubsky90/arena-go"
+	"github.com/gubsky90/arena-go/alloc"
+	"github.com/gubsky90/arena-go/container"
 )
 
 func TestSkipList_InsertSearch(t *testing.T) {

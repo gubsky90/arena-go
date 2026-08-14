@@ -5,9 +5,9 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/thebagchi/arena-go"
-	"github.com/thebagchi/arena-go/alloc"
-	"github.com/thebagchi/arena-go/container"
+	"github.com/gubsky90/arena-go"
+	"github.com/gubsky90/arena-go/alloc"
+	"github.com/gubsky90/arena-go/container"
 )
 
 func TestMap_BasicOperations(t *testing.T) {
@@ -465,7 +465,7 @@ func TestMap_All_EarlyTermination(t *testing.T) {
 	}
 
 	count := 0
-	for _, _ = range m.All() {
+	for range m.All() {
 		count++
 		if count >= 5 {
 			break

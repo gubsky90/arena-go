@@ -3,9 +3,9 @@ package arena_test
 import (
 	"testing"
 
-	"github.com/thebagchi/arena-go"
-	"github.com/thebagchi/arena-go/alloc"
-	iopackage "github.com/thebagchi/arena-go/io"
+	"github.com/gubsky90/arena-go"
+	"github.com/gubsky90/arena-go/alloc"
+	iopackage "github.com/gubsky90/arena-go/io"
 )
 
 func TestWriter(t *testing.T) {

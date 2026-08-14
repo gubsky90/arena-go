@@ -4,10 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/thebagchi/arena-go"
-	"github.com/thebagchi/arena-go/alloc"
-	"github.com/thebagchi/arena-go/container"
-	arenaio "github.com/thebagchi/arena-go/io"
+	"github.com/gubsky90/arena-go"
+	"github.com/gubsky90/arena-go/alloc"
+	"github.com/gubsky90/arena-go/container"
+	arenaio "github.com/gubsky90/arena-go/io"
 )
 
 // Example struct for pointer demonstration

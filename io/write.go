@@ -1,7 +1,7 @@
 package io
 
 import (
-	arena "github.com/thebagchi/arena-go"
+	arena "github.com/gubsky90/arena-go"
 )
 
 // Writer provides a way to write bytes to an arena-allocated buffer

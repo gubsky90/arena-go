@@ -6,7 +6,7 @@ import (
 	"sync"
 	"unsafe"
 
-	arena "github.com/thebagchi/arena-go"
+	arena "github.com/gubsky90/arena-go"
 )
 
 const INITIAL_BUCKET_COUNT = 16 // Initial number of buckets in the hash map

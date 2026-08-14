@@ -3,7 +3,7 @@ package container
 import (
 	"unsafe"
 
-	arena "github.com/thebagchi/arena-go"
+	arena "github.com/gubsky90/arena-go"
 )
 
 // Buffer is a string builder for arena allocators, similar to bytes.Buffer.

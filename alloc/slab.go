@@ -5,7 +5,7 @@ import (
 	"sync"
 	"unsafe"
 
-	"github.com/thebagchi/arena-go/res"
+	"github.com/gubsky90/arena-go/res"
 )
 
 const (
